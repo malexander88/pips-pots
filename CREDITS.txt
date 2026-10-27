@@ -1,0 +1,29 @@
+Pip's Pots - music credits
+==========================
+
+Balloon Pop music:
+"Carefree" Kevin MacLeod (incompetech.com)
+Licensed under Creative Commons: By Attribution 4.0 License
+http://creativecommons.org/licenses/by/4.0/
+
+Colour sorting (levels and endless) music:
+"Easy Lemon" Kevin MacLeod (incompetech.com)
+Licensed under Creative Commons: By Attribution 4.0 License
+http://creativecommons.org/licenses/by/4.0/
+
+Shape Box music:
+"Wholesome" Kevin MacLeod (incompetech.com)
+Licensed under Creative Commons: By Attribution 4.0 License
+http://creativecommons.org/licenses/by/4.0/
+
+Fish Nets music:
+"Aquaria" by cynicmusic, OpenGameArt (https://opengameart.org/content/aquaria)
+CC0 (public domain dedication). Credit optional.
+
+Bubbles music:
+"Underwater Ambient Pad" by isaiah658, OpenGameArt (https://opengameart.org/content/underwater-ambient-pad)
+CC0 (public domain dedication). Credit optional.
+
+Changes: each track was cut to a seamless loop (the Kevin MacLeod tracks with a
+1.5 s equal-power crossfade at a bar-aligned point), loudness-matched and
+re-encoded as Ogg Vorbis and AAC. The menu uses the game's own soft pad.
