@@ -2,10 +2,10 @@ Pip's Pots - music credits
 ==========================
 
 Menu music:
-"Fretless" Kevin MacLeod (incompetech.com)
+"Daily Beetle" Kevin MacLeod (incompetech.com)
 Licensed under Creative Commons: By Attribution 4.0 License
 http://creativecommons.org/licenses/by/4.0/
-Source: https://incompetech.com/music/royalty-free/index.html?isrc=USUAN1500074
+Source: https://incompetech.com/music/royalty-free/index.html?isrc=USUAN1500025
 
 Balloon Pop music:
 "Carefree" Kevin MacLeod (incompetech.com)
@@ -32,5 +32,5 @@ CC0 (public domain dedication). Credit optional.
 
 Changes: each track was cut to a seamless loop (the Kevin MacLeod tracks with a
 1.5 s equal-power crossfade at a bar-aligned point), loudness-matched and
-re-encoded as Ogg Vorbis and AAC. "Fretless" was cut to a 40-bar loop
-(24.45 s to 121.07 s of the original) with the same 1.5 s crossfade.
+re-encoded as Ogg Vorbis and AAC. "Daily Beetle" was cut to a 40-bar loop
+(57.05 s to 153.64 s of the original) with the same 1.5 s crossfade.
