@@ -128,7 +128,7 @@ function clown(ctx, col, name, L, tail, blink, mood, pattern, line) {
   const bodyW = L * 0.34;
   const bodyH = L * 0.26;
   ctx.save();
-  ctx.translate(-L * 0.46, 0);
+  ctx.translate(-L * 0.22, 0);
   ctx.rotate(tail);
   ctx.beginPath();
   ctx.moveTo(0, 0);
@@ -173,7 +173,7 @@ function clown(ctx, col, name, L, tail, blink, mood, pattern, line) {
 
 function tang(ctx, col, name, L, tail, blink, mood, pattern, line) {
   ctx.save();
-  ctx.translate(-L * 0.42, 0);
+  ctx.translate(-L * 0.26, 0);
   ctx.rotate(tail * 0.6);
   ctx.beginPath();
   ctx.moveTo(0, 0);
@@ -296,27 +296,20 @@ function angel(ctx, col, name, L, tail, blink, mood, pattern, line) {
   ctx.closePath();
   strokeInk(ctx, line);
   ctx.save();
-  ctx.translate(-L * 0.2, -L * 0.05);
-  ctx.rotate(-0.4 + tail);
+  ctx.translate(-L * 0.28, 0);
+  ctx.rotate(tail);
   ctx.beginPath();
-  ctx.moveTo(0, 0);
-  ctx.quadraticCurveTo(-L * 0.16, -L * 0.28, -L * 0.05, -L * 0.46);
-  ctx.quadraticCurveTo(L * 0.02, -L * 0.16, 0, 0);
-  ctx.fillStyle = col.light;
+  ctx.moveTo(L * 0.08, -L * 0.04);
+  ctx.quadraticCurveTo(-L * 0.08, -L * 0.16, -L * 0.2, -L * 0.1);
+  ctx.quadraticCurveTo(-L * 0.06, 0, -L * 0.2, L * 0.1);
+  ctx.quadraticCurveTo(-L * 0.08, L * 0.16, L * 0.08, L * 0.04);
+  ctx.closePath();
+  ctx.fillStyle = col.base;
   ctx.fill();
-  strokeInk(ctx, line * 0.8);
+  strokeInk(ctx, line);
   ctx.restore();
-  ctx.save();
-  ctx.translate(-L * 0.18, L * 0.08);
-  ctx.rotate(0.5 + tail);
-  ctx.beginPath();
-  ctx.moveTo(0, 0);
-  ctx.quadraticCurveTo(-L * 0.14, L * 0.26, 0, L * 0.42);
-  ctx.quadraticCurveTo(L * 0.04, L * 0.14, 0, 0);
-  ctx.fillStyle = col.light;
-  ctx.fill();
-  strokeInk(ctx, line * 0.8);
-  ctx.restore();
+  fin(ctx, -L * 0.08, -L * 0.28, L * 0.16, L * 0.12, -1.15, col, line * 0.75);
+  fin(ctx, -L * 0.06, L * 0.26, L * 0.14, L * 0.1, 1.15, col, line * 0.75);
   glossOval(ctx, -L * 0.02, -L * 0.16, L * 0.08, L * 0.05);
   eye(ctx, L * 0.08, -L * 0.06, L * 0.055, blink);
   smile(ctx, L * 0.12, L * 0.06, L * 0.07, mood);
@@ -418,120 +411,175 @@ export function drawNet(ctx, x, y, R, kx, ky, bulge, colorName, line, sway = 0) 
   ctx.translate(x, y);
   ctx.rotate(sway);
   const rx = R * kx;
-  const ry = R * ky;
-  const mouth = rx * 0.86;
-  const bagH = R * 1.7;
-  const belly = mouth * (0.72 + bulge * 0.55);
-  const hem = mouth * 0.38;
+  const ry = R * Math.max(0.55, ky * 0.78);
+  const bagH = R * (2.35 + bulge * 0.85);
+  const belly = rx * (1.05 + bulge * 0.85);
+  const hem = rx * (0.34 + bulge * 0.2);
+  const rim = Math.max(5, R * 0.16);
+  // Far half of the hoop, behind the mesh.
   ctx.beginPath();
-  ctx.moveTo(-mouth, ry * 0.15);
-  ctx.quadraticCurveTo(-belly, ry * 0.15 + bagH * 0.55, -hem, ry * 0.15 + bagH);
-  ctx.quadraticCurveTo(0, ry * 0.15 + bagH + R * 0.18, hem, ry * 0.15 + bagH);
-  ctx.quadraticCurveTo(belly, ry * 0.15 + bagH * 0.55, mouth, ry * 0.15);
-  ctx.closePath();
-  ctx.fillStyle = col.base;
-  ctx.globalAlpha = 0.38;
-  ctx.fill();
+  ctx.ellipse(0, 0, rx, ry, 0, Math.PI, Math.PI * 2);
+  ctx.lineWidth = rim;
+  ctx.strokeStyle = col.dark;
+  ctx.stroke();
+  ctx.lineWidth = line * 0.8;
+  ctx.strokeStyle = INK;
+  ctx.stroke();
+  // Bag mouth is the whole ellipse, so the mesh meets the rim all the way round.
+  ctx.save();
+  ctx.beginPath();
+  ctx.ellipse(0, 0, rx * 0.96, ry * 0.96, 0, 0, Math.PI * 2);
+  ctx.moveTo(-rx, ry * 0.15);
+  ctx.quadraticCurveTo(-belly, bagH * 0.5, -hem, bagH);
+  ctx.quadraticCurveTo(0, bagH + R * 0.28, hem, bagH);
+  ctx.quadraticCurveTo(belly, bagH * 0.5, rx, ry * 0.15);
+  ctx.clip();
+  ctx.fillStyle = col.light;
+  ctx.globalAlpha = 0.42;
+  ctx.fillRect(-rx * 1.4, -ry, rx * 2.8, bagH + ry + R);
   ctx.globalAlpha = 1;
   ctx.strokeStyle = col.dark;
-  ctx.lineWidth = Math.max(1.4, line * 0.45);
-  for (let i = 1; i <= 4; i++) {
-    const t = i / 5;
-    const yy = ry * 0.15 + bagH * t;
-    const half = mouth + (belly - mouth) * Math.sin(t * Math.PI) * 0.85 + (hem - mouth) * t * t;
+  ctx.lineWidth = Math.max(1.25, line * 0.38);
+  for (let i = 0; i <= 9; i++) {
+    const yy = -ry + ((bagH + ry) * i) / 9;
     ctx.beginPath();
-    ctx.moveTo(-half, yy);
-    ctx.lineTo(half, yy);
+    ctx.moveTo(-rx * 1.3, yy);
+    ctx.quadraticCurveTo(0, yy + R * 0.05, rx * 1.3, yy);
     ctx.stroke();
   }
-  for (let i = -2; i <= 2; i++) {
+  for (let i = -4; i <= 4; i++) {
     ctx.beginPath();
-    ctx.moveTo(i * mouth * 0.38, ry * 0.2);
-    ctx.quadraticCurveTo(i * belly * 0.45, ry + bagH * 0.5, i * hem * 0.7, ry * 0.15 + bagH);
+    ctx.moveTo((i / 4) * rx, -ry);
+    ctx.quadraticCurveTo((i / 4) * belly, bagH * 0.45, (i / 4) * hem, bagH);
     ctx.stroke();
   }
+  ctx.restore();
   ctx.beginPath();
-  ctx.moveTo(-mouth, ry * 0.15);
-  ctx.quadraticCurveTo(-belly, ry * 0.15 + bagH * 0.55, -hem, ry * 0.15 + bagH);
-  ctx.quadraticCurveTo(0, ry * 0.15 + bagH + R * 0.18, hem, ry * 0.15 + bagH);
-  ctx.quadraticCurveTo(belly, ry * 0.15 + bagH * 0.55, mouth, ry * 0.15);
+  ctx.moveTo(-rx, ry * 0.15);
+  ctx.quadraticCurveTo(-belly, bagH * 0.5, -hem, bagH);
+  ctx.quadraticCurveTo(0, bagH + R * 0.28, hem, bagH);
+  ctx.quadraticCurveTo(belly, bagH * 0.5, rx, ry * 0.15);
   strokeInk(ctx, line);
-
+  // Near half of the hoop, in front of the bag.
   ctx.beginPath();
-  ctx.ellipse(0, 0, rx, ry, 0, 0, Math.PI * 2);
-  ctx.lineWidth = Math.max(8, R * 0.22);
+  ctx.ellipse(0, 0, rx, ry, 0, Math.PI * 0.05, Math.PI * 0.95);
+  ctx.lineWidth = rim;
   ctx.strokeStyle = col.base;
   ctx.stroke();
   ctx.lineWidth = line;
   ctx.strokeStyle = INK;
   ctx.stroke();
-  glossOval(ctx, -rx * 0.35, -ry * 0.35, rx * 0.28, ry * 0.16);
-
   ctx.save();
-  ctx.translate(rx * 0.75, ry * 0.15);
-  ctx.rotate(0.7);
+  ctx.translate(rx * 0.9, ry * 0.45);
+  ctx.rotate(0.9);
+  tracePole(ctx, R * 1.2, line);
+  ctx.restore();
+  ctx.restore();
+}
+
+function tracePole(ctx, len, line) {
   ctx.fillStyle = "#e8a25a";
   ctx.beginPath();
-  ctx.moveTo(0, -line);
-  ctx.lineTo(R * 0.85, -line * 0.8);
-  ctx.lineTo(R * 0.85, line * 0.8);
-  ctx.lineTo(0, line);
+  ctx.moveTo(0, -line * 0.7);
+  ctx.lineTo(len, -line * 0.45);
+  ctx.lineTo(len, line * 0.45);
+  ctx.lineTo(0, line * 0.7);
   ctx.closePath();
   ctx.fill();
-  strokeInk(ctx, line * 0.8);
-  ctx.restore();
-  ctx.restore();
+  strokeInk(ctx, line * 0.75);
+  ctx.beginPath();
+  ctx.arc(len, 0, line * 0.9, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
 }
 
 /** Clip to the hoop opening plus the bag, in the net's local space. Caller translates. */
 export function netClip(ctx, R, kx, ky, bulge) {
-  const rx = R * kx * 0.78;
-  const ry = R * ky * 0.78;
-  const mouth = R * kx * 0.8;
-  const bagH = R * 1.65;
-  const belly = mouth * (0.68 + bulge * 0.5);
-  const hem = mouth * 0.34;
+  const rx = R * kx * 0.9;
+  const ry = R * Math.max(0.5, ky * 0.72);
+  const bagH = R * (2.2 + bulge * 0.7);
+  const belly = rx * (1.02 + bulge * 0.6);
+  const hem = rx * 0.32;
   ctx.beginPath();
   ctx.ellipse(0, 0, rx, ry, 0, 0, Math.PI * 2);
-  ctx.moveTo(-mouth, ry * 0.2);
-  ctx.quadraticCurveTo(-belly, bagH * 0.55, -hem, bagH);
-  ctx.quadraticCurveTo(0, bagH + R * 0.12, hem, bagH);
-  ctx.quadraticCurveTo(belly, bagH * 0.55, mouth, ry * 0.2);
+  ctx.moveTo(-rx, ry * 0.1);
+  ctx.quadraticCurveTo(-belly, bagH * 0.5, -hem, bagH);
+  ctx.quadraticCurveTo(0, bagH + R * 0.2, hem, bagH);
+  ctx.quadraticCurveTo(belly, bagH * 0.5, rx, ry * 0.1);
   ctx.clip();
 }
 
 export function splashBurst(list, x, y, rng) {
-  for (let i = 0; i < 10; i++) {
-    const a = -Math.PI / 2 + (rng() - 0.5) * 1.6;
-    const sp = 30 + rng() * 70;
+  list.push({ x, y, r: 26, life: 1, crown: true });
+  for (let i = 0; i < 8; i++) {
+    const a = -Math.PI * 0.15 - (i / 7) * Math.PI * 0.7;
+    const sp = 40 + rng() * 80;
     list.push({
-      x: x + (rng() - 0.5) * 20,
-      y: y + (rng() - 0.5) * 10,
+      x: x + (rng() - 0.5) * 16,
+      y,
       vx: Math.cos(a) * sp,
       vy: Math.sin(a) * sp,
-      r: 4 + rng() * 8,
+      r: 5 + rng() * 7,
       life: 1,
+      drop: true,
     });
   }
-  list.push({ x, y, vx: 0, vy: 0, r: 18, life: 1, ring: true });
+  for (let i = 0; i < 6; i++) {
+    list.push({
+      x: x + (rng() - 0.5) * 28,
+      y: y + rng() * 8,
+      vx: (rng() - 0.5) * 20,
+      vy: -20 - rng() * 40,
+      r: 3 + rng() * 5,
+      life: 1,
+      bubble: true,
+    });
+  }
 }
 
 export function drawSplashes(ctx, list, u) {
   for (const p of list) {
-    ctx.globalAlpha = Math.max(0, p.life) * 0.85;
-    if (p.ring) {
+    const life = Math.max(0, p.life);
+    if (p.crown) {
+      const grow = 1 + (1 - life) * 0.8;
+      ctx.save();
+      ctx.translate(p.x, p.y);
+      ctx.globalAlpha = life * 0.55;
+      ctx.fillStyle = "#8fe4f6";
       ctx.beginPath();
-      ctx.arc(p.x, p.y, p.r * (1.4 - p.life * 0.4), 0, Math.PI * 2);
-      ctx.strokeStyle = "#d8fbff";
-      ctx.lineWidth = 4 * u;
+      ctx.ellipse(0, 0, p.r * 1.5 * grow, p.r * 0.72 * grow, 0, Math.PI, 0);
+      ctx.closePath();
+      ctx.fill();
+      ctx.globalAlpha = life * 0.9;
+      ctx.strokeStyle = "rgba(255,255,255,0.95)";
+      ctx.lineWidth = 5 * u;
+      ctx.beginPath();
+      ctx.ellipse(0, 2 * u, p.r * 1.35 * grow, p.r * 0.48 * grow, 0, Math.PI * 0.15, Math.PI * 0.85);
       ctx.stroke();
+      ctx.restore();
+    } else if (p.drop) {
+      ctx.save();
+      ctx.globalAlpha = life * 0.8;
+      ctx.translate(p.x, p.y);
+      ctx.rotate(Math.atan2(p.vy, p.vx) + Math.PI / 2);
+      ctx.fillStyle = "#b7f3ff";
+      ctx.beginPath();
+      ctx.ellipse(0, 0, p.r * 0.55, p.r, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "rgba(255,255,255,0.7)";
+      ctx.beginPath();
+      ctx.arc(-p.r * 0.15, -p.r * 0.25, p.r * 0.22, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
     } else {
+      ctx.globalAlpha = life * 0.75;
+      ctx.fillStyle = "rgba(232, 251, 255, 0.9)";
       ctx.beginPath();
       ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
-      ctx.fillStyle = "#e7fbff";
       ctx.fill();
-      ctx.lineWidth = Math.max(1.4, 1.6 * u);
-      ctx.strokeStyle = INK;
+      ctx.globalAlpha = life;
+      ctx.strokeStyle = "rgba(255,255,255,0.85)";
+      ctx.lineWidth = 1.5 * u;
       ctx.stroke();
     }
   }

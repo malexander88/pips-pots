@@ -10,7 +10,7 @@ import {
   shuffle,
   stepSpring,
 } from "./util.js";
-import { drawBubbles, drawCaustics, drawKelp, drawSea } from "./scenery.js";
+import { drawBubbles, drawCaustics, drawKelp, drawSea, drawSeaFar, drawSeaFront } from "./scenery.js";
 import { drawFish, drawNet, drawSplashes, fishBox, netClip, splashBurst } from "./fishart.js";
 import { drawSparkle, stepSparkles } from "./shapes.js";
 
@@ -43,38 +43,103 @@ export function createFish(Q) {
   return game;
 }
 
+function boxesOverlap(a, b, gap) {
+  return Math.abs(a.x - b.x) < (a.w + b.w) / 2 + gap && Math.abs(a.y - b.y) < (a.h + b.h) / 2 + gap;
+}
+
+function layoutSignature(fish, nets) {
+  const bin = (v) => Math.round(v / 40);
+  const fishKey = fish.map((f) => `${bin(f.homeX)}:${bin(f.homeY)}`).sort().join(",");
+  const netKey = nets.map((n) => `${bin(n.x)}:${bin(n.y)}`).sort().join(",");
+  return `${fishKey}|${netKey}`;
+}
+
+function assignSpots(game, w, h, u) {
+  const count = game.count;
+  const btn = h < 520 ? 72 : 88;
+  const len = (count === 3 ? 104 : 126) * Math.max(0.84, Math.min(u, 1.2));
+  for (let attempt = 0; attempt < 80; attempt++) {
+    const fishPos = [];
+    const netPos = [];
+    let ok = true;
+    for (let i = 0; i < count; i++) {
+      const species = game.fish[i]?.species || game.species[i];
+      const box = fishBox(species, len);
+      let spot = null;
+      for (let t = 0; t < 40 && !spot; t++) {
+        const x = 46 * u + game.rng() * Math.max(40, w * 0.34);
+        const y = 58 * u + game.rng() * Math.max(40, h * 0.55);
+        const rect = { x, y, w: box.w, h: box.h };
+        if (fishPos.every((p) => !boxesOverlap(rect, p, 22))) spot = { x, y, box };
+      }
+      if (!spot) {
+        ok = false;
+        break;
+      }
+      fishPos.push(spot);
+      const R = 46 * Math.max(u, 0.86);
+      let net = null;
+      for (let t = 0; t < 40 && !net; t++) {
+        const x = w * 0.46 + game.rng() * w * 0.34;
+        const y = 48 * u + game.rng() * h * 0.36;
+        const rect = { x, y, w: R * 2.4, h: R * 3.3 };
+        const underHome = x > w - btn - 24 && y > h - btn - 24;
+        if (!underHome && netPos.every((p) => !boxesOverlap(rect, { x: p.x, y: p.y, w: p.R * 2.4, h: p.R * 3.3 }, 8))) {
+          net = { x, y, R };
+        }
+      }
+      if (!net) {
+        ok = false;
+        break;
+      }
+      netPos.push(net);
+    }
+    if (!ok) continue;
+    const previewFish = fishPos.map((p) => ({ homeX: p.x, homeY: p.y }));
+    const key = layoutSignature(previewFish, netPos);
+    if (key === game.lastLayout && (game.layoutRun || 0) >= 3) continue;
+    fishPos.forEach((p, i) => {
+      const f = game.fish[i];
+      if (!f) return;
+      f.len = len;
+      f.box = p.box;
+      f.homeX = p.x;
+      f.homeY = p.y;
+      if (f.phase === "home") {
+        f.x = p.x;
+        f.y = p.y;
+      }
+    });
+    netPos.forEach((p, i) => {
+      const n = game.nets[i];
+      if (!n) return;
+      n.x = p.x;
+      n.y = p.y;
+      n.R = p.R;
+    });
+    game.layoutRun = key === game.lastLayout ? (game.layoutRun || 0) + 1 : 1;
+    game.lastLayout = key;
+    return;
+  }
+}
+
 function place(game, w, h, u) {
   const count = game.count;
-  const home = { x: 18, y: 12, s: h < 520 ? 72 : 88 };
-  const avoid = { x: w - home.s - 16, y: h - home.s - 16, s: home.s + 8 };
-  const fishSlots = count === 3
-    ? [{ x: 0.14, y: 0.24 }, { x: 0.28, y: 0.48 }, { x: 0.16, y: 0.68 }]
-    : [{ x: 0.16, y: 0.28 }, { x: 0.3, y: 0.58 }];
-  const netSlots = count === 3
-    ? [{ x: 0.5, y: 0.22 }, { x: 0.68, y: 0.5 }, { x: 0.84, y: 0.26 }]
-    : [{ x: 0.54, y: 0.24 }, { x: 0.78, y: 0.46 }];
-  const jitter = () => (game.rng() - 0.5) * 12 * u;
   game.fish = [];
   game.nets = [];
   for (let i = 0; i < count; i++) {
-    const len = 132 * Math.max(u, 0.9);
+    const len = 120 * Math.max(u, 0.9);
     const box = fishBox(game.species[i], len);
-    let fx = w * fishSlots[i].x + jitter();
-    let fy = h * fishSlots[i].y + jitter();
-    fy = clamp(fy, 64 * u, h * 0.7);
-    const nx = w * netSlots[i].x + jitter();
-    let ny = h * netSlots[i].y + jitter();
-    if (nx > avoid.x - 30 && ny > avoid.y - 90) ny = avoid.y - 120 * u;
     game.fish.push({
       id: i,
       color: game.colors[i],
       species: game.species[i],
       len,
       box,
-      homeX: fx,
-      homeY: fy,
+      homeX: w * 0.2,
+      homeY: h * (0.3 + i * 0.2),
       x: -len,
-      y: fy,
+      y: h * (0.3 + i * 0.2),
       phase: "arrive",
       t: 0,
       tail: 0,
@@ -90,8 +155,8 @@ function place(game, w, h, u) {
     game.nets.push({
       id: i,
       color: game.colors[i],
-      x: clamp(nx, w * 0.48, w - R * 2.2),
-      y: clamp(ny, 48 * u, h * 0.56),
+      x: w * (0.55 + i * 0.12),
+      y: h * (0.28 + (i % 2) * 0.18),
       R,
       kx: makeSpring(1),
       ky: makeSpring(1),
@@ -108,6 +173,7 @@ function place(game, w, h, u) {
       s: 18 + game.rng() * 28,
     });
   }
+  assignSpots(game, w, h, u);
   game.layoutKey = `${Math.round(w)}x${Math.round(h)}`;
   game.metrics = measure(game);
 }
@@ -116,6 +182,7 @@ function measure(game) {
   return {
     fish: game.fish.map((f) => ({ id: f.id, color: f.color, species: f.species, w: f.box.w, h: f.box.h })),
     nets: game.nets.map((n) => ({ id: n.id, color: n.color, x: n.x, y: n.y, R: n.R })),
+    layoutRun: game.layoutRun || 0,
   };
 }
 
@@ -142,6 +209,10 @@ function relayout(game, w, h, u) {
 
 export function stepFish(game, dt, w, h, calm) {
   const u = Math.min(w / 844, h / 390);
+  game.w = w;
+  game.h = h;
+  game.u = u;
+  game.reshuffle = () => assignSpots(game, w, h, u);
   if (!game.fish.length) place(game, w, h, u);
   else relayout(game, w, h, u);
   game.time += dt;
@@ -169,10 +240,30 @@ export function stepFish(game, dt, w, h, calm) {
     }
     const net = game.nets[f.slot];
     if (f.phase === "home") {
-      f.x += (f.homeX - f.x) * Math.min(1, dt * 4);
-      f.y += (f.homeY + Math.sin(game.time * 1.6 + f.id) * 6 - f.y) * Math.min(1, dt * 4);
+      f.dart = (f.dart ?? 1.2 + f.id) - dt;
+      if (f.dart <= 0) {
+        f.dart = 1.8 + game.rng() * 2.4;
+        f.dash = calm ? 0 : 0.32;
+        f.facing = game.rng() > 0.5 ? 1 : -1;
+      }
+      if ((f.dash || 0) > 0) {
+        f.dash -= dt;
+        f.x += f.facing * 110 * dt;
+      }
+      f.x += (f.homeX - f.x) * Math.min(1, dt * 2.4);
+      f.y += (f.homeY + Math.sin(game.time * 1.6 + f.id) * 4 - f.y) * Math.min(1, dt * 4);
+      for (const other of game.fish) {
+        if (other === f || other.phase === "drag" || other.phase === "catch") continue;
+        const dx = f.x - other.x;
+        const dy = f.y - other.y;
+        const needX = (f.box.w + other.box.w) / 2 + 8;
+        const needY = (f.box.h + other.box.h) / 2 + 8;
+        if (Math.abs(dx) < needX && Math.abs(dy) < needY) {
+          f.x += Math.sign(dx || 1) * 40 * dt;
+          f.y += Math.sign(dy || 1) * 40 * dt;
+        }
+      }
       f.scale += (1 - f.scale) * Math.min(1, dt * 10);
-      f.facing = 1;
     } else if (f.phase === "arrive") {
       f.t += dt;
       const k = Math.min(1, f.t / 0.85);
@@ -221,7 +312,7 @@ export function stepFish(game, dt, w, h, calm) {
       } else {
         const k = Math.min(1, (f.t - hop) / 0.55);
         f.x = net.x;
-        f.y = net.y + k * net.R * 1.15;
+        f.y = net.y + k * net.R * 1.85;
         f.scale = 1 - k * 0.15;
         if (!f.splashed) {
           f.splashed = true;
@@ -245,7 +336,7 @@ export function stepFish(game, dt, w, h, calm) {
       ty = need.y;
     }
     const bagFish = game.fish.find((f) => f.slot === net.id && f.phase === "catch" && f.t >= 0.26);
-    if (bagFish) tb = 1;
+    if (bagFish) tb = 1.8;
     stepSpring(net.kx, tx, dt);
     stepSpring(net.ky, ty, dt);
     stepSpring(net.bulge, tb, dt, 10, 0.6);
@@ -268,8 +359,8 @@ function stretchFor(fish, R) {
   const halfW = fish.box.w * 0.5;
   const halfH = fish.box.h * 0.5;
   const pad = 8;
-  const x = clamp((halfW * Math.SQRT2 + pad) / R, 1, 2.6);
-  const y = clamp((halfH * Math.SQRT2 + pad) / R, 1, 2.6);
+  const x = clamp(Math.max(1.45, (halfW * 1.25 + pad) / (R * 0.82)), 1.45, 2.6);
+  const y = clamp(Math.max(1.35, (halfH * 1.25 + pad) / (R * 0.82)), 1.35, 2.6);
   return { x, y };
 }
 
@@ -287,21 +378,10 @@ function finishCatch(game, fish) {
   fish.species = species;
   fish.box = fishBox(fish.species, fish.len);
   fish.x = -fish.len;
-  fish.y = fish.homeY;
   sfx("arriveChime", fish.color);
   game.round += 1;
-  if (game.round % game.count === 0) {
-    const ys = game.fish.map((f) => f.homeY);
-    for (let i = ys.length - 1; i > 0; i--) {
-      const j = Math.floor(game.rng() * (i + 1));
-      const tmp = ys[i];
-      ys[i] = ys[j];
-      ys[j] = tmp;
-    }
-    game.fish.forEach((f, i) => {
-      f.homeY = ys[i];
-    });
-  }
+  if (game.w) assignSpots(game, game.w, game.h, game.u);
+  fish.y = fish.homeY;
 }
 
 function nearestNet(game, x, y) {
@@ -318,15 +398,21 @@ function nearestNet(game, x, y) {
 }
 
 function hitFish(game, x, y) {
-  for (let i = game.fish.length - 1; i >= 0; i--) {
-    const f = game.fish[i];
-    if (f.phase !== "home" && f.phase !== "arrive") continue;
-    if (f.phase === "arrive" && f.t < 0.35) continue;
-    const dx = x - f.x;
-    const dy = y - f.y;
-    if (Math.abs(dx) <= f.box.w * 0.55 && Math.abs(dy) <= f.box.h * 0.6) return f;
-  }
-  return null;
+  let best = null;
+  let bestD = Infinity;
+  let bestI = -1;
+  game.fish.forEach((f, i) => {
+    if (f.phase !== "home" && f.phase !== "arrive") return;
+    if (f.phase === "arrive" && f.t < 0.35) return;
+    if (Math.abs(x - f.x) > f.box.w * 0.5 || Math.abs(y - f.y) > f.box.h * 0.55) return;
+    const d = Math.hypot(x - f.x, y - f.y);
+    if (d < bestD - 1 || (Math.abs(d - bestD) <= 1 && i > bestI)) {
+      best = f;
+      bestD = d;
+      bestI = i;
+    }
+  });
+  return best;
 }
 
 export function fishPointerDown(game, x, y) {
@@ -348,12 +434,15 @@ export function fishPointerMove(game, x, y) {
 
 export function fishPointerUp(game) {
   if (!game.drag) return;
-  const f = game.fish.find((fish) => fish.id === game.drag.id);
+  const finger = game.drag;
+  const f = game.fish.find((fish) => fish.id === finger.id);
   game.drag = null;
   if (!f || f.phase !== "drag") return;
-  const net = nearestNet(game, f.x, f.y);
+  f.x = finger.x;
+  f.y = finger.y;
+  const net = nearestNet(game, finger.x, finger.y);
   const reach = net ? Math.max(net.R * 1.35, 64) : 0;
-  if (net && Math.hypot(f.x - net.x, f.y - net.y) <= reach) {
+  if (net && Math.hypot(finger.x - net.x, finger.y - net.y) <= reach) {
     if (net.color === f.color) {
       f.phase = "catch";
       f.t = 0;
@@ -393,11 +482,14 @@ export function drawFishGame(game, bg, fg, w, h, calm) {
   const ctx = fg.getContext("2d");
   ctx.setTransform(fg.__dpr, 0, 0, fg.__dpr, 0, 0);
   ctx.clearRect(0, 0, w, h);
+  drawSeaFar(ctx, w, h, game.time, calm);
   drawCaustics(ctx, w, h, game.time);
+  const behind = game.fish.filter((f) => f.phase !== "drag" && f.y < h * 0.42);
+  for (const f of behind) if (!(f.phase === "catch" && f.t >= 0.26)) paintFish(ctx, f, line, game.pattern);
   drawKelp(ctx, w, h, game.time, calm);
   drawBubbles(ctx, game.bubbles, u);
 
-  const order = game.fish.filter((f) => f.phase !== "drag");
+  const order = game.fish.filter((f) => f.phase !== "drag" && f.y >= h * 0.42);
   for (const net of game.nets) {
     drawNet(ctx, net.x, net.y, net.R, net.kx.v, net.ky.v, net.bulge.v, net.color, line, Math.sin(game.time * 1.2 + net.sway) * 0.04);
     const inside = game.fish.filter((f) => f.slot === net.id && f.phase === "catch" && f.t >= 0.26);
@@ -413,7 +505,11 @@ export function drawFishGame(game, bg, fg, w, h, calm) {
   }
   for (const f of order) if (!(f.phase === "catch" && f.t >= 0.26)) paintFish(ctx, f, line, game.pattern);
   const held = game.fish.find((f) => f.phase === "drag");
-  if (held) paintFish(ctx, held, line, game.pattern);
+  if (held) {
+    held.facing = 1;
+    paintFish(ctx, held, line, game.pattern);
+  }
+  drawSeaFront(ctx, w, h, game.time, calm);
   drawSplashes(ctx, game.splashes, u);
   for (const s of game.sparkles) drawSparkle(ctx, s);
 }

@@ -9,7 +9,7 @@ import {
   sfx,
   shuffle,
 } from "./util.js";
-import { drawFace, drawMeadow, drawPip, fillStroke, glossOval, shadow, traceRoundRect } from "./scenery.js";
+import { drawFace, drawGardenFar, drawGardenFront, drawGardenMid, drawPip, fillStroke, glossOval, shadow } from "./scenery.js";
 import { burst, drawSparkle, drawToy, stepSparkles } from "./shapes.js";
 import { paint } from "./util.js";
 
@@ -129,7 +129,7 @@ export function layoutPots(game, w, h) {
     p.h = potH;
     px += potW + potGap;
   }
-  game.view = { u, matX, matY, matW, matH, toy, gap, pipX: Math.max(78 * u, 70), pipY: matY + matH - 8 * u, pip: 78 * u };
+  game.view = { u, w, h, matX, matY, matW, matH, toy, gap, pipX: Math.max(150, 140 * u), pipY: Math.min(h * 0.84, matY + matH - 6 * u), pip: 86 * u };
   const boxes = live.filter((t) => t.phase === "idle").map((t) => t.size);
   game.metrics = {
     toy,
@@ -176,8 +176,8 @@ export function stepPots(game, dt, w, h) {
       const k = Math.min(1, t.t / 0.42);
       const e = 1 - (1 - k) ** 3;
       t.x = t.fromX + (t.toX - t.fromX) * e;
-      t.y = t.fromY + (t.toY - t.fromY) * e + k * t.size * 0.2;
-      t.scale = 1 - k * 0.35;
+      t.y = t.fromY + (t.toY - t.fromY) * e - Math.sin(k * Math.PI) * (t.size || 64) * 0.7;
+      t.scale = k < 0.62 ? 1 + k * 0.12 : 1.07 - ((k - 0.62) / 0.38) * 0.5;
       if (k >= 1) t.phase = "gone";
     } else if (t.phase === "idle") {
       t.x = t.homeX;
@@ -188,6 +188,7 @@ export function stepPots(game, dt, w, h) {
   if (game.toys.some((t) => t.phase === "gone")) {
     game.toys = game.toys.filter((t) => t.phase !== "gone");
     refill(game);
+    layoutPots(game, w, h);
   }
   stepSparkles(game.sparkles, dt);
 }
@@ -262,11 +263,14 @@ export function potsPointerMove(game, x, y) {
 
 export function potsPointerUp(game, w, h) {
   if (!game.drag) return;
+  const finger = game.drag;
   layoutPots(game, w, h);
-  const t = game.toys.find((toy) => toy.id === game.drag.id);
+  const t = game.toys.find((toy) => toy.id === finger.id);
   game.drag = null;
   if (!t || t.phase !== "drag") return;
-  const pot = hitPot(game, t.x, t.y);
+  t.x = finger.x;
+  t.y = finger.y;
+  const pot = hitPot(game, finger.x, finger.y);
   if (pot && pot.color === t.color) {
     t.phase = "sink";
     t.t = 0;
@@ -298,56 +302,25 @@ export function potsPointerUp(game, w, h) {
 export function drawPots(game, bg, fg, w, h, calm) {
   const u = game.view?.u || Math.min(w / 844, h / 390);
   const line = inkWidth(u);
-  if (game.bgKey !== `${w}x${h}`) {
-    const bctx = bg.getContext("2d");
-    bctx.setTransform(fg.__dpr, 0, 0, fg.__dpr, 0, 0);
-    drawMeadow(bctx, w, h);
-    game.bgKey = `${w}x${h}`;
-  }
   const ctx = fg.getContext("2d");
   ctx.setTransform(fg.__dpr, 0, 0, fg.__dpr, 0, 0);
   ctx.clearRect(0, 0, w, h);
+  drawGardenFar(ctx, w, h, game.time, calm);
+  drawGardenMid(ctx, w, h, game.time, calm);
   const v = game.view;
   if (!v) return;
-  drawMat(ctx, v, line);
   for (const p of game.pots) drawPot(ctx, p, line, false);
-  for (const t of game.toys) if (t.phase === "sink") drawToy(ctx, t.shape, t.x, t.y, t.size * t.scale, t.color, line, { noShadow: true, alpha: 1 - t.t });
+  for (const t of game.toys) if (t.phase === "sink" && Number.isFinite(t.size)) drawToy(ctx, t.shape, t.x, t.y, t.size * t.scale, t.color, line, { noShadow: true, alpha: 1 - t.t });
   for (const p of game.pots) drawPot(ctx, p, line, true);
   for (const t of game.toys) {
-    if (t.phase === "gone" || t.phase === "sink" || t.phase === "drag") continue;
+    if (t.phase === "gone" || t.phase === "sink" || t.phase === "drag" || !Number.isFinite(t.size)) continue;
     drawToy(ctx, t.shape, t.x, t.y, t.size, t.color, line, { lift: t.scale, wobble: t.wobble });
   }
   drawPip(ctx, v.pipX, v.pipY, v.pip, "idle", game.time, calm);
   const held = game.toys.find((t) => t.phase === "drag");
-  if (held) drawToy(ctx, held.shape, held.x, held.y, held.size, held.color, line, { lift: held.scale });
+  if (held && Number.isFinite(held.size)) drawToy(ctx, held.shape, held.x, held.y, held.size, held.color, line, { lift: held.scale });
+  drawGardenFront(ctx, w, h, game.time, calm);
   for (const s of game.sparkles) drawSparkle(ctx, s);
-}
-
-function drawMat(ctx, v, line) {
-  shadow(ctx, v.matX + v.matW / 2, v.matY + v.matH + 4, v.matW * 0.46, 12);
-  traceRoundRect(ctx, v.matX, v.matY, v.matW, v.matH, 18);
-  ctx.fillStyle = "#f0b56a";
-  ctx.fill();
-  ctx.save();
-  traceRoundRect(ctx, v.matX, v.matY, v.matW, v.matH, 18);
-  ctx.clip();
-  ctx.globalAlpha = 0.28;
-  ctx.fillStyle = "#e07a4a";
-  const stripe = 18;
-  for (let x = v.matX - v.matH; x < v.matX + v.matW; x += stripe * 2) {
-    ctx.beginPath();
-    ctx.moveTo(x, v.matY);
-    ctx.lineTo(x + stripe, v.matY);
-    ctx.lineTo(x + stripe + v.matH, v.matY + v.matH);
-    ctx.lineTo(x + v.matH, v.matY + v.matH);
-    ctx.fill();
-  }
-  ctx.restore();
-  traceRoundRect(ctx, v.matX, v.matY, v.matW, v.matH, 18);
-  fillStroke(ctx, null, line);
-  ctx.fillStyle = "#d08948";
-  traceRoundRect(ctx, v.matX + 6, v.matY + v.matH - 12, v.matW - 12, 10, 5);
-  ctx.fill();
 }
 
 function drawPot(ctx, p, line, front) {

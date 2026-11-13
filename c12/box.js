@@ -1,26 +1,11 @@
 /** Shape box: front-on toy box, holes that match their toys, glass window on the front. */
 
 import { inkWidth, mulberry32, sfx, shuffle } from "./util.js";
-import { drawFace, drawMeadow, drawPip, drawStump, fillStroke, glossOval, shadow, traceRoundRect } from "./scenery.js";
+import { drawFace, drawGardenFar, drawGardenFront, drawGardenMid, drawPip, drawStump, fillStroke, glossOval, shadow, traceRoundRect } from "./scenery.js";
 import { burst, drawHole, drawSparkle, drawToy, holeOuter, stepSparkles } from "./shapes.js";
 
-const SETS = {
-  2: [
-    ["ball", "star"],
-    ["heart", "pyramid"],
-    ["block", "ring"],
-  ],
-  3: [
-    ["ball", "star", "heart"],
-    ["block", "pyramid", "star"],
-    ["heart", "ring", "block"],
-  ],
-  4: [
-    ["ball", "block", "star", "heart"],
-    ["pyramid", "star", "ring", "block"],
-    ["heart", "ball", "pyramid", "star"],
-  ],
-};
+const ALL_SHAPES = ["ball", "block", "star", "heart", "pyramid", "ring", "coin", "button"];
+const CLASH = new Set(["ball|coin", "coin|ball", "ball|button", "button|ball", "coin|button", "button|coin", "ball|ring", "ring|ball"]);
 
 const CANON = {
   ball: "red",
@@ -63,9 +48,24 @@ export function createBox(Q) {
   return game;
 }
 
+function pickShapes(n, rng) {
+  const order = shuffle(ALL_SHAPES, rng);
+  const out = [];
+  for (const shape of order) {
+    if (out.some((have) => CLASH.has(`${have}|${shape}`))) continue;
+    out.push(shape);
+    if (out.length === n) return out;
+  }
+  for (const shape of ALL_SHAPES) {
+    if (out.includes(shape)) continue;
+    out.push(shape);
+    if (out.length === n) break;
+  }
+  return out;
+}
+
 function dealRound(game) {
-  const sets = SETS[game.holesN];
-  game.shapes = sets[game.round % sets.length].slice();
+  game.shapes = pickShapes(game.holesN, game.rng);
   game.colors = colorsFor(game.shapes, game.mix, game.rng);
   game.toys = game.shapes.map((shape, i) => ({
     id: game.round * 10 + i,
@@ -93,23 +93,22 @@ export function layoutBox(game, w, h) {
   const u = Math.min(w / 844, h / 390);
   const line = inkWidth(u);
   const n = game.shapes.length;
-  const boxW = Math.min(w * 0.66, 560 * u);
-  const lidH = Math.min(h * 0.3, 124 * u);
+  const boxW = Math.min(w * 0.6, 520 * u);
+  const lidH = Math.min(h * 0.34, 138 * u);
   const frontH = Math.min(h * 0.28, 116 * u);
-  const boxX = (w - boxW) / 2 + 24 * u;
+  const boxX = (w - boxW) / 2 + 48 * u;
   const boxY = Math.max(18 * u, h * 0.07);
   const pad = 4 + line;
   const gap = Math.max(12, 14 * u);
-  const innerW = boxW - pad * 2;
-  const innerH = lidH - pad * 2;
-  let opening = Math.min(innerH, (innerW - (n - 1) * gap) / n) * 0.72;
-  for (let i = 0; i < 8; i++) {
+  const wantToy = w >= 820 ? 66 : 60;
+  let opening = wantToy / 0.82;
+  for (let i = 0; i < 10; i++) {
     const outer = holeOuter(opening, line) * 2;
     const row = n * outer + (n - 1) * gap;
     const margin = (boxW - row) / 2;
     const vMargin = (lidH - outer) / 2;
-    if (margin >= pad && vMargin >= pad) break;
-    opening *= 0.94;
+    if (margin >= pad && vMargin >= pad && opening * 0.82 >= (w >= 820 ? 64 : 56)) break;
+    opening *= 0.96;
   }
   const outer = holeOuter(opening, line) * 2;
   const row = n * outer + (n - 1) * gap;
@@ -150,17 +149,17 @@ export function layoutBox(game, w, h) {
     }
     tx += toy + trayGap;
   }
-  const winR = Math.max(toy * 0.62, Math.min(frontH * 0.42, toy * 0.9));
+  const winR = Math.min(frontH * 0.48, Math.max(58 * u, toy * 0.95));
   const win = {
-    x: boxX + boxW * 0.72,
+    x: boxX + boxW * 0.74,
     y: boxY + lidH + frontH * 0.52,
     r: winR,
   };
-  const posted = toy * 0.78;
+  const posted = Math.min(toy * 0.78, winR * 0.92);
   game.view = {
     u, line, boxX, boxY, boxW, lidH, frontH, trayX, trayY, trayW, trayH, toy, posted, opening, gap, trayGap, win,
-    stumpX: Math.max(86 * u, boxX - 78 * u),
-    stumpY: boxY + lidH + frontH * 0.55,
+    stumpX: 78,
+    stumpY: h * 0.78,
     stump: 54 * u,
     pip: 70 * u,
   };
@@ -190,6 +189,7 @@ export function layoutBox(game, w, h) {
 
 export function stepBox(game, dt, w, h) {
   game.time += dt;
+  game.shake = Math.max(0, (game.shake || 0) - dt * 1.4);
   layoutBox(game, w, h);
   if (game.moodT > 0) {
     game.moodT -= dt;
@@ -218,8 +218,9 @@ export function stepBox(game, dt, w, h) {
       const k = Math.min(1, t.t / 0.34);
       const e = 1 - (1 - k) ** 3;
       t.x = t.fromX + (t.toX - t.fromX) * e;
-      t.y = t.fromY + (t.toY - t.fromY) * e;
-      t.scale = 1 - k * 0.4;
+      t.y = t.fromY + (t.toY - t.fromY) * e - Math.sin(Math.min(1, k) * Math.PI) * (t.size || 64) * 0.4;
+      t.scale = k < 0.65 ? 1 : 1 - ((k - 0.65) / 0.35) * 0.55;
+      t.wobble = k * 2.2;
       if (k >= 1 && !t.posted) {
         t.posted = true;
         t.phase = "in";
@@ -238,6 +239,7 @@ function finishRound(game) {
   game.cheer = true;
   game.mood = "joy";
   game.moodT = 1.1;
+  game.shake = 1;
   sfx("boxCheer", game.colors, false);
   const v = game.view;
   if (v) burst(game.sparkles, v.boxX + v.boxW / 2, v.boxY + v.lidH, "yellow", game.rng, 18);
@@ -290,11 +292,14 @@ export function boxPointerMove(game, x, y) {
 
 export function boxPointerUp(game, w, h) {
   if (!game.drag) return;
+  const finger = game.drag;
   layoutBox(game, w, h);
-  const t = game.toys.find((toy) => toy.id === game.drag.id);
+  const t = game.toys.find((toy) => toy.id === finger.id);
   game.drag = null;
   if (!t || t.phase !== "drag") return;
-  const hole = hitHole(game, t.x, t.y);
+  t.x = finger.x;
+  t.y = finger.y;
+  const hole = hitHole(game, finger.x, finger.y);
   if (hole && hole.shape === t.shape && !game.pile.some((p) => p.shape === t.shape)) {
     t.phase = "post";
     t.t = 0;
@@ -322,21 +327,26 @@ export function drawBox(game, bg, fg, w, h, calm) {
   const v = game.view;
   if (!v) return;
   const { line } = v;
-  if (game.bgKey !== `${w}x${h}`) {
-    const bctx = bg.getContext("2d");
-    bctx.setTransform(fg.__dpr, 0, 0, fg.__dpr, 0, 0);
-    drawMeadow(bctx, w, h);
-    game.bgKey = `${w}x${h}`;
-  }
   const ctx = fg.getContext("2d");
   ctx.setTransform(fg.__dpr, 0, 0, fg.__dpr, 0, 0);
   ctx.clearRect(0, 0, w, h);
+  drawGardenFar(ctx, w, h, game.time, calm);
+  drawGardenMid(ctx, w, h, game.time, calm);
   drawStump(ctx, v.stumpX, v.stumpY, v.stump);
-  drawPip(ctx, v.stumpX, v.stumpY - v.stump * 0.78, v.pip, game.mood, game.time, calm);
-  drawBoxBody(ctx, v, game, line);
-  for (const hole of game.holes) drawHole(ctx, hole.shape, hole.cx, hole.cy, hole.opening, hole.color, line);
-  drawWindow(ctx, v, game, line);
-  drawTray(ctx, v, line);
+  drawPip(ctx, v.stumpX, v.stumpY - v.stump * 0.15, v.pip, game.mood, game.time, calm);
+  const shake = Math.sin(game.time * 26) * (game.shake || 0) * 8;
+  drawBoxBody(ctx, v, game, line, shake);
+  ctx.save();
+  ctx.translate(shake, 0);
+  for (const hole of game.holes) {
+    ctx.save();
+    ctx.translate(hole.cx, hole.cy);
+    ctx.scale(1, 0.78);
+    drawHole(ctx, hole.shape, 0, 0, hole.opening, hole.color, line);
+    ctx.restore();
+  }
+  ctx.restore();
+  drawWindow(ctx, v, game, line, shake);
   for (const t of game.toys) {
     if (t.phase === "in" || t.phase === "drag" || t.phase === "post") continue;
     drawToy(ctx, t.shape, t.x, t.y, t.size, t.color, line, { lift: t.scale, wobble: t.wobble });
@@ -344,34 +354,46 @@ export function drawBox(game, bg, fg, w, h, calm) {
   for (const t of game.toys) if (t.phase === "post") drawToy(ctx, t.shape, t.x, t.y, t.size * t.scale, t.color, line, { noShadow: true });
   const held = game.toys.find((t) => t.phase === "drag");
   if (held) drawToy(ctx, held.shape, held.x, held.y, held.size, held.color, line, { lift: held.scale });
+  drawGardenFront(ctx, w, h, game.time, calm);
   for (const s of game.sparkles) drawSparkle(ctx, s);
 }
 
-function drawBoxBody(ctx, v, game, line) {
+function drawBoxBody(ctx, v, game, line, shake = 0) {
   const { boxX, boxY, boxW, lidH, frontH } = v;
-  const h = lidH + frontH;
-  shadow(ctx, boxX + boxW / 2, boxY + h + 6, boxW * 0.46, 12);
-  traceRoundRect(ctx, boxX, boxY, boxW, h, 22);
-  const wood = ctx.createLinearGradient(boxX, boxY, boxX, boxY + h);
-  wood.addColorStop(0, "#f2c07a");
-  wood.addColorStop(0.42, "#e8a25a");
+  const x = boxX + shake;
+  const depth = Math.min(boxW * 0.16, 56 * (v.u || 1));
+  shadow(ctx, x + boxW / 2 + depth * 0.3, boxY + lidH + frontH + 8, boxW * 0.48, 14);
+  ctx.beginPath();
+  ctx.moveTo(x + boxW, boxY + lidH);
+  ctx.lineTo(x + boxW + depth, boxY + lidH * 0.42);
+  ctx.lineTo(x + boxW + depth, boxY + lidH * 0.42 + frontH * 0.88);
+  ctx.lineTo(x + boxW, boxY + lidH + frontH);
+  ctx.closePath();
+  ctx.fillStyle = "#c47a38";
+  ctx.fill();
+  fillStroke(ctx, null, line);
+  traceRoundRect(ctx, x, boxY + lidH, boxW, frontH, 18);
+  const wood = ctx.createLinearGradient(x, boxY + lidH, x, boxY + lidH + frontH);
+  wood.addColorStop(0, "#f0c48a");
   wood.addColorStop(1, "#d4893e");
   ctx.fillStyle = wood;
   ctx.fill();
   fillStroke(ctx, null, line);
-  ctx.fillStyle = "rgba(255, 236, 196, 0.55)";
-  ctx.fillRect(boxX + line, boxY + line, boxW - line * 2, lidH - line);
-  ctx.strokeStyle = "#2e4168";
-  ctx.lineWidth = line * 0.7;
   ctx.beginPath();
-  ctx.moveTo(boxX + 8, boxY + lidH);
-  ctx.lineTo(boxX + boxW - 8, boxY + lidH);
-  ctx.stroke();
-  drawFace(ctx, boxX + boxW * 0.32, boxY + lidH + frontH * 0.48, Math.min(boxW, frontH) * 0.7, game.mood, 1);
+  ctx.moveTo(x + 12, boxY + lidH);
+  ctx.lineTo(x + boxW - 8, boxY + lidH);
+  ctx.lineTo(x + boxW - 28, boxY + 10);
+  ctx.lineTo(x + 28, boxY + 10);
+  ctx.closePath();
+  ctx.fillStyle = "#f6d7a4";
+  ctx.fill();
+  fillStroke(ctx, null, line);
+  drawFace(ctx, x + boxW * 0.3, boxY + lidH + frontH * 0.48, Math.min(boxW, frontH) * 0.62, game.mood, 1);
 }
 
-function drawWindow(ctx, v, game, line) {
-  const { win, posted } = v;
+function drawWindow(ctx, v, game, line, shake = 0) {
+  v = { ...v, win: { ...v.win, x: v.win.x + shake } };
+  const { win } = v;
   ctx.save();
   ctx.beginPath();
   ctx.arc(win.x, win.y, win.r, 0, Math.PI * 2);
@@ -379,11 +401,17 @@ function drawWindow(ctx, v, game, line) {
   ctx.fillStyle = "#e8c48a";
   ctx.fillRect(win.x - win.r, win.y - win.r, win.r * 2, win.r * 2);
   const n = game.pile.length;
+  const cols = n <= 1 ? 1 : 2;
+  const rows = Math.max(1, Math.ceil(n / cols));
+  const cell = Math.min(v.posted, (win.r * 1.45) / Math.max(cols, rows));
   game.pile.forEach((toy, i) => {
-    const spread = Math.min(win.r * 0.7, posted * 0.45);
-    const x = win.x + (n <= 1 ? 0 : ((i / Math.max(1, n - 1)) - 0.5) * spread * 2);
-    const y = win.y + win.r * 0.35 - posted / 2 - (n - 1 - i) * posted * 0.18;
-    drawToy(ctx, toy.shape, x, y, posted, toy.color, line * 0.8, { noShadow: false });
+    const col = i % cols;
+    const row = Math.floor(i / cols);
+    const spanX = (cols - 1) * cell * 0.72;
+    const spanY = (rows - 1) * cell * 0.62;
+    const x = win.x - spanX / 2 + col * cell * 0.72;
+    const y = win.y - spanY / 2 + row * cell * 0.62;
+    drawToy(ctx, toy.shape, x, y, cell * 0.92, toy.color, line * 0.75, { noShadow: true });
   });
   const glass = ctx.createLinearGradient(win.x, win.y - win.r, win.x, win.y + win.r);
   glass.addColorStop(0, "rgba(186, 230, 255, 0.55)");
