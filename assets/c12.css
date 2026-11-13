@@ -1,0 +1,23 @@
+#c12-stage {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  touch-action: none;
+  pointer-events: auto;
+}
+
+#c12-stage canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.game-root[data-phase="play"][data-mode="fish"] canvas:not(#c12-bg):not(#c12-fg),
+.game-root[data-phase="play"][data-mode="levels"] canvas:not(#c12-bg):not(#c12-fg),
+.game-root[data-phase="play"][data-mode="endless"] canvas:not(#c12-bg):not(#c12-fg),
+.game-root[data-phase="play"][data-mode="shapebox"] canvas:not(#c12-bg):not(#c12-fg) {
+  opacity: 0;
+}
