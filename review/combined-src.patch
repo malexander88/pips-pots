@@ -37,7 +37,7 @@ diff -ruN orig/game/src/game/Scene.tsx ss2/game/src/game/Scene.tsx
        </>
 diff -ruN orig/game/src/game/audio.ts ss2/game/src/game/audio.ts
 --- orig/game/src/game/audio.ts	2026-10-28 09:52:16.000000000 +0000
-+++ ss2/game/src/game/audio.ts	2026-11-13 21:49:43.890120207 +0000
++++ ss2/game/src/game/audio.ts	2026-11-13 23:27:00.943911547 +0000
 @@ -9,7 +9,7 @@
   * mp3 adds a gap at the loop point. Credits live in public/CREDITS.txt and in
   * the grown-up panel. Theme cycle 7: the menu plays its own track (MENU_TRACK).
@@ -65,7 +65,7 @@ diff -ruN orig/game/src/game/audio.ts ss2/game/src/game/audio.ts
  };
  const TRACK_CALM = 0.6;
  const TRACK_FADE_IN = 1.6;
-@@ -836,6 +838,63 @@
+@@ -836,6 +838,64 @@
      };
    }
  
@@ -102,8 +102,9 @@ diff -ruN orig/game/src/game/audio.ts ss2/game/src/game/audio.ts
 +    const scale = [77, 79, 81, 84, 86, 89];
 +    const midi = scale[((step % scale.length) + scale.length) % scale.length]!;
 +    const now = this.ctx!.currentTime;
-+    this.bell(now, midi, 0.05, 2.4);
-+    this.bell(now + 0.09, midi + 12, 0.012, 1.4);
++    // Shooting stars 3: half the earlier level (0.05 / 0.012), at the user's request.
++    this.bell(now, midi, 0.025, 2.4);
++    this.bell(now + 0.09, midi + 12, 0.006, 1.4);
 +  }
 +
 +  /** A star settling into the jar: a low, very quiet bell. */
@@ -1296,7 +1297,7 @@ diff -ruN orig/game/src/game/stars/starArt.ts ss2/game/src/game/stars/starArt.ts
 +}
 diff -ruN orig/game/src/game/stars/stars.css ss2/game/src/game/stars/stars.css
 --- orig/game/src/game/stars/stars.css	1970-01-01 01:00:00.000000000 +0100
-+++ ss2/game/src/game/stars/stars.css	2026-11-13 23:12:02.103744605 +0000
++++ ss2/game/src/game/stars/stars.css	2026-11-13 23:27:00.923911632 +0000
 @@ -0,0 +1,237 @@
 +/* Shooting Star Catcher (replaces the bubble tubes). Flat 2D stage over an empty 3D view. */
 +.ss-stage {
@@ -1319,12 +1320,12 @@ diff -ruN orig/game/src/game/stars/stars.css ss2/game/src/game/stars/stars.css
 +  height: 100%;
 +  display: block;
 +}
-+/* The turning sky: one full turn every 120 s, on the compositor. */
++/* The turning sky: one full turn every 360 s, on the compositor. */
 +.ss-spin {
 +  position: absolute;
 +  pointer-events: none;
 +  will-change: transform;
-+  animation: ss-spin 120s linear infinite;
++  animation: ss-spin 360s linear infinite;
 +}
 +@keyframes ss-spin {
 +  from { transform: rotate(0deg); }
