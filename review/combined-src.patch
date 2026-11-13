@@ -1,6 +1,6 @@
-diff -ruN orig/game/src/game/GameApp.tsx combo/game/src/game/GameApp.tsx
+diff -ruN orig/game/src/game/GameApp.tsx ss2/game/src/game/GameApp.tsx
 --- orig/game/src/game/GameApp.tsx	2026-10-28 12:22:55.000000000 +0000
-+++ combo/game/src/game/GameApp.tsx	2026-11-13 22:40:50.864765802 +0000
++++ ss2/game/src/game/GameApp.tsx	2026-11-13 22:40:50.864765802 +0000
 @@ -51,13 +51,15 @@
    const gentle = safeGl;
    // Balloon Pop renders at device DPR (cap 3). Passing it here too stops every sim re-render
@@ -18,9 +18,9 @@ diff -ruN orig/game/src/game/GameApp.tsx combo/game/src/game/GameApp.tsx
          camera={{ position: [0, 8, 9], fov: 38, near: 0.1, far: 90 }}
          gl={
            gentle
-diff -ruN orig/game/src/game/Scene.tsx combo/game/src/game/Scene.tsx
+diff -ruN orig/game/src/game/Scene.tsx ss2/game/src/game/Scene.tsx
 --- orig/game/src/game/Scene.tsx	2026-10-28 09:52:16.000000000 +0000
-+++ combo/game/src/game/Scene.tsx	2026-11-13 22:40:50.864765802 +0000
++++ ss2/game/src/game/Scene.tsx	2026-11-13 22:40:50.864765802 +0000
 @@ -1905,11 +1905,11 @@
    const bubbles = sim.mode === "bubbles" && sim.phase !== "menu";
    const fish = sim.mode === "fish" && sim.phase !== "menu";
@@ -35,9 +35,9 @@ diff -ruN orig/game/src/game/Scene.tsx combo/game/src/game/Scene.tsx
          <GameLoop />
          <CameraRig />
        </>
-diff -ruN orig/game/src/game/audio.ts combo/game/src/game/audio.ts
+diff -ruN orig/game/src/game/audio.ts ss2/game/src/game/audio.ts
 --- orig/game/src/game/audio.ts	2026-10-28 09:52:16.000000000 +0000
-+++ combo/game/src/game/audio.ts	2026-11-13 21:49:43.890120207 +0000
++++ ss2/game/src/game/audio.ts	2026-11-13 21:49:43.890120207 +0000
 @@ -9,7 +9,7 @@
   * mp3 adds a gap at the loop point. Credits live in public/CREDITS.txt and in
   * the grown-up panel. Theme cycle 7: the menu plays its own track (MENU_TRACK).
@@ -129,9 +129,9 @@ diff -ruN orig/game/src/game/audio.ts combo/game/src/game/audio.ts
    private allowNote() {
      if (!this.ctx || !this.enabled) return false;
      const now = this.ctx.currentTime;
-diff -ruN orig/game/src/game/credits.ts combo/game/src/game/credits.ts
+diff -ruN orig/game/src/game/credits.ts ss2/game/src/game/credits.ts
 --- orig/game/src/game/credits.ts	2026-10-28 09:56:19.000000000 +0000
-+++ combo/game/src/game/credits.ts	2026-11-13 21:51:06.993898109 +0000
++++ ss2/game/src/game/credits.ts	2026-11-13 21:51:06.993898109 +0000
 @@ -33,5 +33,5 @@
      ],
    },
@@ -139,9 +139,9 @@ diff -ruN orig/game/src/game/credits.ts combo/game/src/game/credits.ts
 -  { game: "Bubbles", lines: ["\u201CUnderwater Ambient Pad\u201D by isaiah658, OpenGameArt. CC0."] },
 +  { game: "Shooting stars", lines: ["Tr\u00E4umerei (Schumann) \u2014 performed by Donald Betts; recording from Musopen (public domain)."] },
  ];
-diff -ruN orig/game/src/game/sea/elastic.ts combo/game/src/game/sea/elastic.ts
+diff -ruN orig/game/src/game/sea/elastic.ts ss2/game/src/game/sea/elastic.ts
 --- orig/game/src/game/sea/elastic.ts	2026-10-28 09:56:34.000000000 +0000
-+++ combo/game/src/game/sea/elastic.ts	2026-11-13 22:41:02.084693953 +0000
++++ ss2/game/src/game/sea/elastic.ts	2026-11-13 22:41:02.084693953 +0000
 @@ -492,7 +492,10 @@
    return [k, v] as const;
  }
@@ -153,9 +153,9 @@ diff -ruN orig/game/src/game/sea/elastic.ts combo/game/src/game/sea/elastic.ts
    const bdt = Math.min(0.05, dt);
    for (const fish of sim.fish) fish.beat = fishBeat(fish) + beatRate(fish, sim.calmMotion) * bdt;
    sim.nets.forEach((net, index) => {
-diff -ruN orig/game/src/game/sim.ts combo/game/src/game/sim.ts
+diff -ruN orig/game/src/game/sim.ts ss2/game/src/game/sim.ts
 --- orig/game/src/game/sim.ts	2026-10-28 09:52:15.000000000 +0000
-+++ combo/game/src/game/sim.ts	2026-11-13 22:40:50.864765802 +0000
++++ ss2/game/src/game/sim.ts	2026-11-13 22:40:50.864765802 +0000
 @@ -8,7 +8,8 @@
    levels: "easylemon",
    endless: "easylemon",
@@ -219,15 +219,15 @@ diff -ruN orig/game/src/game/sim.ts combo/game/src/game/sim.ts
  
  declare global {
    interface Window {
-diff -ruN orig/game/src/game/stars/StarCatcher.tsx combo/game/src/game/stars/StarCatcher.tsx
+diff -ruN orig/game/src/game/stars/StarCatcher.tsx ss2/game/src/game/stars/StarCatcher.tsx
 --- orig/game/src/game/stars/StarCatcher.tsx	1970-01-01 01:00:00.000000000 +0100
-+++ combo/game/src/game/stars/StarCatcher.tsx	2026-11-13 22:03:06.043963787 +0000
-@@ -0,0 +1,454 @@
++++ ss2/game/src/game/stars/StarCatcher.tsx	2026-11-13 23:15:21.230891421 +0000
+@@ -0,0 +1,507 @@
 +import { memo, useEffect, useMemo, useRef, useState } from "react";
 +import { audio } from "../audio";
 +import { sim } from "../sim";
 +import { HouseCanvas } from "../house/HouseCanvas";
-+import { JAR_CAP, STAR_TINTS, paintJar, paintLedge, paintSky, paintSleepyPip, paintStarBody, paintTinyStar, paintTrail } from "./starArt";
++import { JAR_CAP, STAR_TINTS, moonSurfaceY, paintJar, paintMoon, paintSkyGradient, paintSleepyPip, paintStarBody, paintStarfield, paintTinyStar, paintTrail } from "./starArt";
 +import "./stars.css";
 +
 +/**
@@ -291,13 +291,16 @@ diff -ruN orig/game/src/game/stars/StarCatcher.tsx combo/game/src/game/stars/Sta
 +  const jarRef = useRef<HTMLDivElement>(null);
 +  const glowRef = useRef<HTMLDivElement>(null);
 +  const pipRef = useRef<HTMLDivElement>(null);
++  const spinRef = useRef<HTMLDivElement>(null);
++  const fieldRef = useRef<HTMLCanvasElement>(null);
++  const safeRef = useRef<HTMLDivElement>(null);
 +  const jarSet = useRef<((n: number) => void) | null>(null);
 +  const twinkles = useMemo(() => {
 +    let s = 3;
 +    const r = () => ((s = (s * 16807) % 2147483647) / 2147483647);
-+    return Array.from({ length: 26 }, () => ({
++    return Array.from({ length: 44 }, () => ({
 +      left: `${(r() * 100).toFixed(2)}%`,
-+      top: `${(Math.pow(r(), 1.3) * 78).toFixed(2)}%`,
++      top: `${(r() * 100).toFixed(2)}%`,
 +      size: 2 + r() * 2.6,
 +      dur: 3.5 + r() * 4.5,
 +      delay: -r() * 8,
@@ -311,7 +314,11 @@ diff -ruN orig/game/src/game/stars/StarCatcher.tsx combo/game/src/game/stars/Sta
 +    const jar = jarRef.current;
 +    const glow = glowRef.current;
 +    const pip = pipRef.current;
-+    if (!stage || !layer || !corner || !jar || !glow || !pip) return;
++    const spin = spinRef.current;
++    const field = fieldRef.current;
++    const safe = safeRef.current;
++    if (!stage || !layer || !corner || !jar || !glow || !pip || !spin || !field || !safe) return;
++    let fieldKey = "";
 +    const els = Array.from(layer.querySelectorAll<HTMLElement>(".ss-star"));
 +    const stars: Star[] = els.map((el, i) => ({
 +      i, el, state: "off", x: 0, y: 0, y0: 0, vx: 0, vy: 0, bobA: 0, bobW: 0, bobP: 0, t: 0, k: 0, fx: 0, fy: 0, cx: 0, cy: 0, scale: 1,
@@ -342,22 +349,52 @@ diff -ruN orig/game/src/game/stars/StarCatcher.tsx combo/game/src/game/stars/Sta
 +      const S = R / 0.26;
 +      stage.style.setProperty("--ss-s", `${S}px`);
 +      stage.style.setProperty("--ss-r", `${R}px`);
-+      // Corner group: ledge, jar and Pip in the bottom-right, kept small.
-+      const ledgeW = Math.min(W * 0.3, H * 0.7);
-+      const ledgeH = ledgeW * 0.42;
++      // The turning sky: a square layer as wide as the screen diagonal, centred on the screen,
++      // so the corners stay covered at every angle. Painted once per size; the turn is a CSS
++      // transform animation (compositor only).
++      const D = Math.ceil(Math.hypot(W, H)) + 8;
++      spin.style.cssText = `width:${D}px;height:${D}px;left:${(W - D) / 2}px;top:${(H - D) / 2}px`;
++      const fdpr = Math.max(1, Math.min(3, window.devicePixelRatio || 1, 4096 / D));
++      const key = `${D}@${fdpr}`;
++      if (key !== fieldKey) {
++        fieldKey = key;
++        field.width = Math.round(D * fdpr);
++        field.height = Math.round(D * fdpr);
++        const fctx = field.getContext("2d");
++        if (fctx) {
++          fctx.setTransform(fdpr, 0, 0, fdpr, 0, 0);
++          fctx.clearRect(0, 0, D, D);
++          try {
++            paintStarfield(fctx, D, D);
++          } catch (error) {
++            console.warn("[pip] starfield skipped:", error instanceof Error ? error.message : String(error));
++          }
++        }
++      }
++      // Corner group: the little moon with Pip and the jar, kept small and fully inside the
++      // visible area (clear of the right/bottom safe-area insets, e.g. a notch or gesture bar).
++      const safeR = safe.offsetWidth;
++      const safeB = safe.offsetHeight;
++      const margin = Math.max(12, W * 0.025);
++      const moonW = Math.min(W * 0.3, H * 0.68);
++      // The moon's base stays on the screen's bottom edge (no floating gap); a bottom inset
++      // just makes the dome taller so Pip and the jar stand clear of it.
++      const moonH = moonW * 0.25 + safeB;
 +      const jarH = H * 0.2;
 +      const jarW = jarH * 0.74;
 +      const pipH = H * 0.16;
 +      const pipW = pipH * 0.83;
-+      corner.style.width = `${ledgeW}px`;
-+      corner.style.height = `${ledgeH}px`;
-+      const surfaceJar = ledgeH * 0.22;
-+      const surfacePip = ledgeH * 0.3;
-+      const jarLeft = ledgeW * 0.6 - jarW / 2;
-+      const jarTop = surfaceJar - jarH + jarH * 0.03;
++      corner.style.right = `${safeR + margin}px`;
++      corner.style.bottom = "0px";
++      corner.style.width = `${moonW}px`;
++      corner.style.height = `${moonH}px`;
++      const jarX = moonW * 0.66;
++      const pipX = moonW * 0.3;
++      const jarLeft = jarX - jarW / 2;
++      const jarTop = moonSurfaceY(moonW, moonH, jarX) - jarH * 0.97;
 +      jar.style.cssText = `left:${jarLeft}px;top:${jarTop}px;width:${jarW}px;height:${jarH}px`;
 +      glow.style.cssText = `left:${jarLeft - jarW * 0.9}px;top:${jarTop - jarH * 0.25}px;width:${jarW * 2.8}px;height:${jarH * 1.6}px`;
-+      pip.style.cssText = `left:${ledgeW * 0.25 - pipW / 2}px;top:${surfacePip - pipH * 0.96}px;width:${pipW}px;height:${pipH}px`;
++      pip.style.cssText = `left:${pipX - pipW / 2}px;top:${moonSurfaceY(moonW, moonH, pipX) - pipH * 0.91}px;width:${pipW}px;height:${pipH}px`;
 +      const cr = corner.getBoundingClientRect();
 +      mouth = { x: cr.left - r.left + jarLeft + jarW / 2, y: cr.top - r.top + jarTop + jarH * 0.12 };
 +    };
@@ -628,7 +665,18 @@ diff -ruN orig/game/src/game/stars/StarCatcher.tsx combo/game/src/game/stars/Sta
 +      advance: (sec: number) => {
 +        for (let t = 0; t < sec; t += 1 / 60) step(1 / 60);
 +      },
-+      geometry: () => ({ W, H, R, mouth }),
++      geometry: () => {
++        const c = corner.getBoundingClientRect();
++        const st = stage.getBoundingClientRect();
++        const sp = spin.getBoundingClientRect();
++        return {
++          W, H, R, mouth,
++          corner: { left: c.left - st.left, top: c.top - st.top, right: c.right - st.left, bottom: c.bottom - st.top },
++          safe: { right: safe.offsetWidth, bottom: safe.offsetHeight },
++          spin: { size: spin.offsetWidth, backing: field.width, transform: getComputedStyle(spin).transform },
++        };
++      },
++      relayout: layout,
 +    };
 +
 +    return () => {
@@ -641,18 +689,23 @@ diff -ruN orig/game/src/game/stars/StarCatcher.tsx combo/game/src/game/stars/Sta
 +
 +  return (
 +    <div className="ss-stage" ref={stageRef} data-jar="0">
-+      <HouseCanvas className="ss-sky" paint={paintSky} />
-+      <div className="ss-twinkles" aria-hidden="true">
-+        {twinkles.map((t, i) => (
-+          <i
-+            key={i}
-+            style={{ left: t.left, top: t.top, width: t.size, height: t.size, animationDuration: `${t.dur}s`, animationDelay: `${t.delay}s` }}
-+          />
-+        ))}
++      <HouseCanvas className="ss-sky" paint={paintSkyGradient} />
++      <div className="ss-spin" ref={spinRef} aria-hidden="true">
++        <canvas className="ss-field" ref={fieldRef} />
++        <div className="ss-twinkles">
++          {twinkles.map((t, i) => (
++            <i
++              key={i}
++              style={{ left: t.left, top: t.top, width: t.size, height: t.size, animationDuration: `${t.dur}s`, animationDelay: `${t.delay}s` }}
++            />
++          ))}
++        </div>
 +      </div>
++      <i className="ss-depth" aria-hidden="true" />
++      <div className="ss-safe" ref={safeRef} aria-hidden="true" />
 +      <div className="ss-corner" ref={cornerRef} aria-hidden="true">
 +        <div className="ss-glow" ref={glowRef} />
-+        <HouseCanvas className="ss-ledge" paint={paintLedge} />
++        <HouseCanvas className="ss-ledge" paint={paintMoon} />
 +        <div className="ss-pip" ref={pipRef}>
 +          <HouseCanvas className="ss-pip-art calm" paint={PIP_CALM} />
 +          <HouseCanvas className="ss-pip-art cheer" paint={PIP_CHEER} />
@@ -677,10 +730,10 @@ diff -ruN orig/game/src/game/stars/StarCatcher.tsx combo/game/src/game/stars/Sta
 +}
 +
 +export const StarCatcher = memo(StarCatcherInner);
-diff -ruN orig/game/src/game/stars/starArt.ts combo/game/src/game/stars/starArt.ts
+diff -ruN orig/game/src/game/stars/starArt.ts ss2/game/src/game/stars/starArt.ts
 --- orig/game/src/game/stars/starArt.ts	1970-01-01 01:00:00.000000000 +0100
-+++ combo/game/src/game/stars/starArt.ts	2026-11-13 21:58:22.884727413 +0000
-@@ -0,0 +1,481 @@
++++ ss2/game/src/game/stars/starArt.ts	2026-11-13 23:14:43.435053095 +0000
+@@ -0,0 +1,560 @@
 +/**
 + * Shooting Star Catcher art (replaces the bubble tubes). Flat 2D canvas painters in the house
 + * style: navy outlines, soft fills, nothing bright. A bedtime sky, sleepy pastel stars, a small
@@ -738,6 +791,12 @@ diff -ruN orig/game/src/game/stars/starArt.ts combo/game/src/game/stars/starArt.
 + * varied sizes, a few dim far-away galaxies and wisps of nebula. Painted once per size.
 + */
 +export function paintSky(ctx: Ctx, w: number, h: number) {
++  paintSkyGradient(ctx, w, h);
++  paintStarfield(ctx, w, h, true);
++}
++
++/** The screen-fixed part of the sky: a dithered purple-to-black gradient (never rotates). */
++export function paintSkyGradient(ctx: Ctx, w: number, h: number) {
 +  const canvas = ctx.canvas;
 +  const W = canvas.width;
 +  const H = canvas.height;
@@ -780,7 +839,15 @@ diff -ruN orig/game/src/game/stars/starArt.ts combo/game/src/game/stars/starArt.
 +  ctx.setTransform(1, 0, 0, 1, 0, 0);
 +  ctx.putImageData(img, 0, 0);
 +  ctx.restore();
++}
 +
++/**
++ * The turning part of the sky, on a transparent canvas: nebula wisps, a few dim far-away
++ * galaxies and a dense faint starfield. `screenFade` dims stars toward the bottom (only for the
++ * static menu card; in game the field turns, so a fixed overlay does that instead).
++ */
++export function paintStarfield(ctx: Ctx, w: number, h: number, screenFade = false) {
++  const k = ctx.canvas.width / Math.max(1, w);
 +  const r2 = rng(11);
 +  // 2) Faint nebula wisps (very low alpha, large soft blobs).
 +  ctx.save();
@@ -797,10 +864,10 @@ diff -ruN orig/game/src/game/stars/starArt.ts combo/game/src/game/stars/starArt.
 +    ctx.fillRect(x - rr, y - rr, rr * 2, rr * 2);
 +  }
 +  // 3) A few far-away galaxies: tilted soft ellipses with a faint core and arms.
-+  const galaxies = 4;
++  const galaxies = Math.max(4, Math.round((w * h) / 140000));
 +  for (let i = 0; i < galaxies; i++) {
 +    const x = (0.12 + ((i + r2() * 0.6) / galaxies) * 0.8) * w;
-+    const y = (0.12 + r2() * 0.55) * h;
++    const y = (screenFade ? 0.12 + r2() * 0.55 : 0.08 + r2() * 0.84) * h;
 +    const size = (0.035 + r2() * 0.04) * Math.min(w, h) * 1.6;
 +    const rot = r2() * Math.PI;
 +    ctx.save();
@@ -826,13 +893,13 @@ diff -ruN orig/game/src/game/stars/starArt.ts combo/game/src/game/stars/starArt.
 +
 +  // 4) Dense faint starfield, varied sizes; fewer and dimmer toward the bottom.
 +  const area = w * h;
-+  const count = Math.round(Math.min(1600, Math.max(500, area / 380)));
++  const count = Math.round(Math.min(3200, Math.max(500, area / 380)));
 +  for (let i = 0; i < count; i++) {
 +    const x = r2() * w;
-+    const y = Math.pow(r2(), 1.15) * h;
++    const y = (screenFade ? Math.pow(r2(), 1.15) : r2()) * h;
 +    const depth = r2();
 +    const size = depth < 0.82 ? (0.35 + r2() * 0.45) : depth < 0.97 ? 0.8 + r2() * 0.5 : 1.3 + r2() * 0.6;
-+    const fade = 1 - (y / h) * 0.45;
++    const fade = screenFade ? 1 - (y / h) * 0.45 : 1;
 +    const a = (depth < 0.82 ? 0.25 + r2() * 0.3 : 0.45 + r2() * 0.35) * fade;
 +    const tint = r2();
 +    const col = tint < 0.7 ? "236, 232, 248" : tint < 0.85 ? "214, 204, 245" : "246, 232, 205";
@@ -1052,34 +1119,99 @@ diff -ruN orig/game/src/game/stars/starArt.ts combo/game/src/game/stars/starArt.
 +  };
 +}
 +
-+/** The dusky ledge in the bottom-right corner that the jar and Pip sit on. */
-+export function paintLedge(ctx: Ctx, w: number, h: number) {
-+  const lw = Math.max(2.4, h * 0.035);
-+  const path = () => {
++/**
++ * The little moon in the bottom-right corner that the jar and Pip sit on: the top of a small
++ * grey-silver moon rising from the bottom edge, with soft craters and gentle shading, kept dim.
++ * The dome is a circle segment whose chord is the canvas bottom edge: width w, height h.
++ */
++export function moonSurfaceY(w: number, h: number, x: number) {
++  const R = (w * w) / 4 / h / 2 + h / 2;
++  const dx = x - w / 2;
++  return R - Math.sqrt(Math.max(0, R * R - dx * dx));
++}
++
++export function paintMoon(ctx: Ctx, w: number, h: number) {
++  const lw = Math.max(2.4, h * 0.03);
++  const R = (w * w) / 4 / h / 2 + h / 2;
++  const cx = w / 2;
++  const cy = R;
++  const dome = () => {
 +    ctx.beginPath();
-+    ctx.moveTo(-lw, h + lw);
-+    ctx.lineTo(-lw, h * 0.62);
-+    ctx.bezierCurveTo(w * 0.12, h * 0.3, w * 0.3, h * 0.18, w * 0.55, h * 0.2);
-+    ctx.bezierCurveTo(w * 0.8, h * 0.22, w * 0.95, h * 0.28, w + lw, h * 0.32);
-+    ctx.lineTo(w + lw, h + lw);
-+    ctx.closePath();
++    ctx.arc(cx, cy, R, 0, Math.PI * 2);
 +  };
-+  path();
-+  const g = ctx.createLinearGradient(0, h * 0.2, 0, h);
-+  g.addColorStop(0, "#3a2f5c");
-+  g.addColorStop(1, "#1a1530");
++  ctx.save();
++  // Faint cool rim glow behind the moon.
++  const halo = ctx.createRadialGradient(cx, cy, R * 0.96, cx, cy, R + h * 0.22);
++  halo.addColorStop(0, "rgba(190, 196, 225, 0.12)");
++  halo.addColorStop(1, "rgba(190, 196, 225, 0)");
++  ctx.fillStyle = halo;
++  ctx.fillRect(0, 0, w, h);
++  // Body: silver-grey, lit softly from the upper left, darker toward the lower right.
++  dome();
++  const g = ctx.createRadialGradient(cx - w * 0.22, h * 0.05, h * 0.05, cx, cy, R);
++  g.addColorStop(0, "#bcbcc4");
++  g.addColorStop(0.35, "#9c9ca6");
++  g.addColorStop(0.75, "#76767f");
++  g.addColorStop(1, "#56566a");
 +  ctx.fillStyle = g;
 +  ctx.fill();
-+  path();
++  ctx.clip();
++  // Soft maria (darker plains).
++  ctx.fillStyle = "rgba(78, 78, 90, 0.2)";
++  ctx.beginPath();
++  ctx.ellipse(w * 0.36, h * 0.62, w * 0.16, h * 0.2, -0.2, 0, Math.PI * 2);
++  ctx.ellipse(w * 0.7, h * 0.78, w * 0.13, h * 0.16, 0.3, 0, Math.PI * 2);
++  ctx.fill();
++  // Craters: a dark bowl, a lit lower-right rim and a shadowed upper-left lip.
++  const craters: [number, number, number][] = [
++    [0.18, 0.55, 0.075], [0.46, 0.4, 0.05], [0.58, 0.72, 0.09], [0.84, 0.6, 0.06],
++    [0.3, 0.85, 0.055], [0.72, 0.36, 0.035], [0.1, 0.86, 0.04], [0.92, 0.88, 0.045],
++  ];
++  for (const [fx, fy, fr] of craters) {
++    const x = w * fx;
++    const y = h * fy;
++    const r = w * fr;
++    const ry = r * 0.6;
++    // Soft lit lip on the lower right, then a soft shadowed bowl offset up-left.
++    ctx.save();
++    ctx.translate(x, y);
++    ctx.scale(1, ry / r);
++    const lip = ctx.createRadialGradient(r * 0.18, r * 0.2, r * 0.55, r * 0.18, r * 0.2, r * 1.1);
++    lip.addColorStop(0, "rgba(214, 216, 232, 0)");
++    lip.addColorStop(0.5, "rgba(214, 216, 232, 0.07)");
++    lip.addColorStop(1, "rgba(214, 216, 232, 0)");
++    ctx.fillStyle = lip;
++    ctx.beginPath();
++    ctx.arc(r * 0.12, r * 0.14, r * 1.15, 0, Math.PI * 2);
++    ctx.fill();
++    const bowl = ctx.createRadialGradient(-r * 0.1, -r * 0.12, 0, -r * 0.05, -r * 0.05, r);
++    bowl.addColorStop(0, "rgba(58, 58, 70, 0.34)");
++    bowl.addColorStop(0.6, "rgba(64, 64, 76, 0.22)");
++    bowl.addColorStop(1, "rgba(64, 64, 76, 0)");
++    ctx.fillStyle = bowl;
++    ctx.beginPath();
++    ctx.arc(0, 0, r, 0, Math.PI * 2);
++    ctx.fill();
++    ctx.restore();
++  }
++  // A few tiny pocks.
++  const r3 = rng(5);
++  ctx.fillStyle = "rgba(64, 64, 78, 0.26)";
++  for (let i = 0; i < 26; i++) {
++    const x = r3() * w;
++    const y = h * (0.15 + r3() * 0.85);
++    ctx.beginPath();
++    ctx.ellipse(x, y, w * (0.006 + r3() * 0.008), w * 0.005, 0, 0, Math.PI * 2);
++    ctx.fill();
++  }
++  // Night dimming so the moon stays calm.
++  ctx.fillStyle = "rgba(24, 18, 52, 0.22)";
++  ctx.fillRect(0, 0, w, h);
++  ctx.restore();
++  dome();
 +  ctx.strokeStyle = SCENE_INK;
 +  ctx.lineWidth = lw;
 +  ctx.stroke();
-+  // Two little craters so it reads as a soft moon hill.
-+  ctx.fillStyle = "rgba(20, 16, 40, 0.35)";
-+  ctx.beginPath();
-+  ctx.ellipse(w * 0.3, h * 0.55, w * 0.06, h * 0.06, 0, 0, Math.PI * 2);
-+  ctx.ellipse(w * 0.72, h * 0.62, w * 0.04, h * 0.045, 0, 0, Math.PI * 2);
-+  ctx.fill();
 +}
 +
 +/** Small sleepy Pip (eyes closed), tinted for the night so he stays a quiet companion. */
@@ -1130,17 +1262,17 @@ diff -ruN orig/game/src/game/stars/starArt.ts combo/game/src/game/stars/starArt.
 +  paintSky(ctx, w, h);
 +  // Ledge, jar and stars, in proportions that read at card size.
 +  ctx.save();
-+  ctx.translate(w * 0.58, h * 0.74);
-+  paintLedge(ctx, w * 0.42, h * 0.26);
++  ctx.translate(w * 0.56, h * 0.76);
++  paintMoon(ctx, w * 0.4, h * 0.24);
 +  ctx.restore();
 +  ctx.save();
-+  const g = ctx.createRadialGradient(w * 0.78, h * 0.8, 0, w * 0.78, h * 0.8, h * 0.28);
++  const g = ctx.createRadialGradient(w * 0.78, h * 0.68, 0, w * 0.78, h * 0.68, h * 0.26);
 +  g.addColorStop(0, "rgba(250, 214, 150, 0.28)");
 +  g.addColorStop(1, "rgba(250, 214, 150, 0)");
 +  ctx.fillStyle = g;
 +  ctx.fillRect(0, 0, w, h);
-+  ctx.translate(w * 0.72, h * 0.52);
-+  paintJar(5)(ctx, w * 0.13, h * 0.3);
++  ctx.translate(w * 0.72, h * 0.5);
++  paintJar(5)(ctx, w * 0.12, h * 0.28);
 +  ctx.restore();
 +  const big = Math.min(w, h) * 0.75;
 +  ctx.save();
@@ -1162,10 +1294,10 @@ diff -ruN orig/game/src/game/stars/starArt.ts combo/game/src/game/stars/starArt.
 +  paintStarBody(1)(ctx, small, small);
 +  ctx.restore();
 +}
-diff -ruN orig/game/src/game/stars/stars.css combo/game/src/game/stars/stars.css
+diff -ruN orig/game/src/game/stars/stars.css ss2/game/src/game/stars/stars.css
 --- orig/game/src/game/stars/stars.css	1970-01-01 01:00:00.000000000 +0100
-+++ combo/game/src/game/stars/stars.css	2026-11-13 21:56:21.845053239 +0000
-@@ -0,0 +1,201 @@
++++ ss2/game/src/game/stars/stars.css	2026-11-13 23:12:02.103744605 +0000
+@@ -0,0 +1,237 @@
 +/* Shooting Star Catcher (replaces the bubble tubes). Flat 2D stage over an empty 3D view. */
 +.ss-stage {
 +  position: absolute;
@@ -1186,6 +1318,41 @@ diff -ruN orig/game/src/game/stars/stars.css combo/game/src/game/stars/stars.css
 +  width: 100%;
 +  height: 100%;
 +  display: block;
++}
++/* The turning sky: one full turn every 120 s, on the compositor. */
++.ss-spin {
++  position: absolute;
++  pointer-events: none;
++  will-change: transform;
++  animation: ss-spin 120s linear infinite;
++}
++@keyframes ss-spin {
++  from { transform: rotate(0deg); }
++  to { transform: rotate(360deg); }
++}
++.ss-stage .ss-field {
++  position: absolute;
++  inset: 0;
++  width: 100%;
++  height: 100%;
++  display: block;
++}
++/* Screen-fixed dimming so stars fade a little toward the bottom whatever the angle. */
++.ss-depth {
++  position: absolute;
++  inset: 0;
++  pointer-events: none;
++  background: linear-gradient(180deg, rgba(5, 4, 12, 0) 45%, rgba(5, 4, 12, 0.42) 100%);
++}
++/* Probe for the safe-area insets (tests can override with --ss-test-safe-*). */
++.ss-safe {
++  position: absolute;
++  left: 0;
++  top: 0;
++  visibility: hidden;
++  pointer-events: none;
++  width: var(--ss-test-safe-r, env(safe-area-inset-right, 0px));
++  height: var(--ss-test-safe-b, env(safe-area-inset-bottom, 0px));
 +}
 +.ss-twinkles {
 +  position: absolute;
@@ -1361,15 +1528,16 @@ diff -ruN orig/game/src/game/stars/stars.css combo/game/src/game/stars/stars.css
 +  100% { opacity: 0; transform: translate(var(--dx), var(--dy)) scale(1); }
 +}
 +@media (prefers-reduced-motion: reduce) {
++  .ss-spin,
 +  .ss-body,
 +  .ss-pip,
 +  .ss-twinkles i {
 +    animation: none;
 +  }
 +}
-diff -ruN orig/game/src/game/ui.tsx combo/game/src/game/ui.tsx
+diff -ruN orig/game/src/game/ui.tsx ss2/game/src/game/ui.tsx
 --- orig/game/src/game/ui.tsx	2026-10-28 12:23:47.000000000 +0000
-+++ combo/game/src/game/ui.tsx	2026-11-13 22:02:35.884045194 +0000
++++ ss2/game/src/game/ui.tsx	2026-11-13 22:02:35.884045194 +0000
 @@ -1,19 +1,21 @@
 -import { useCallback, useEffect, useRef, useState, type CSSProperties, type MouseEvent, type PointerEvent, type ReactNode } from "react";
 +import { useCallback, useEffect, useRef, useState, type MouseEvent, type PointerEvent, type ReactNode } from "react";
@@ -1501,7 +1669,7 @@ diff -ruN orig/game/src/game/ui.tsx combo/game/src/game/ui.tsx
    );
  }
 --- orig/game/public/CREDITS.txt	2026-10-28 09:56:22.000000000 +0000
-+++ combo/game/public/CREDITS.txt	2026-11-13 21:51:20.797861173 +0000
++++ ss2/game/public/CREDITS.txt	2026-11-13 21:51:20.797861173 +0000
 @@ -26,11 +26,15 @@
  "Aquaria" by cynicmusic, OpenGameArt (https://opengameart.org/content/aquaria)
  CC0 (public domain dedication). Credit optional.
