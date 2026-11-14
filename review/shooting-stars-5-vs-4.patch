@@ -1,0 +1,966 @@
+diff -ruN s4/game/src/game/GameApp.tsx s5/game/src/game/GameApp.tsx
+--- s4/game/src/game/GameApp.tsx	2026-11-13 22:40:50.000000000 +0000
++++ s5/game/src/game/GameApp.tsx	2026-11-14 17:23:02.018792665 +0000
+@@ -9,23 +9,77 @@
+ import { Menu, PlayChrome } from "./ui";
+ import { houseCssVars } from "./house/tokens";
+ import { UiBoundary } from "./house/UiBoundary";
++import { installLifecycle, onAppPause } from "./lifecycle";
+ 
+ const HOUSE_VARS = houseCssVars() as CSSProperties;
+ 
++// Before any game listener, so the tap that brings the app back is heard by the game too.
++installLifecycle();
++
++/** Where the player was, written whenever the app goes to the background. */
++const RESUME_KEY = "pips-pots.resume";
++const RESUME_MAX_MS = 30 * 60 * 1000;
++
++function saveResume() {
++  try {
++    const where = sim.phase === "menu" ? null : sim.mode;
++    localStorage.setItem(RESUME_KEY, JSON.stringify({ mode: where, at: Date.now() }));
++  } catch {
++    /* private mode */
++  }
++}
++
++/**
++ * The Android wrapper reloads with ?resume=1 only when Android itself restored the app after
++ * closing it in the background. Then go straight back to the game the player was in (if it was
++ * less than half an hour ago); a normal launch still opens on the menu.
++ */
++function resumeIfAsked() {
++  const params = new URLSearchParams(location.search);
++  if (params.get("resume") !== "1" || params.has("mode")) return;
++  try {
++    const raw = localStorage.getItem(RESUME_KEY);
++    if (!raw) return;
++    const got = JSON.parse(raw) as { mode?: string | null; at?: number };
++    if (!got.mode || !got.at || Date.now() - got.at > RESUME_MAX_MS) return;
++    const start: Record<string, () => void> = {
++      balloons: () => sim.startBalloons(),
++      bubbles: () => sim.startBubbles(),
++      levels: () => sim.startSorting(),
++      endless: () => sim.startSorting(),
++      piano: () => sim.startPiano(),
++      colouring: () => sim.startColouring(),
++    };
++    start[got.mode]?.();
++  } catch {
++    /* bad JSON: stay on the menu */
++  }
++}
++
+ export default function GameApp() {
+   const rev = useSim();
+   const [dpr, setDpr] = useState<number | [number, number] | null>(null);
+   const [glKey, setGlKey] = useState(0);
+   const [safeGl, setSafeGl] = useState(false);
+   useEffect(() => {
++    // Background/foreground (home button, recents, screen off, the Android Activity pausing):
++    // one owner suspends every sound and the game loops, and wakes only this screen's music.
++    installLifecycle();
++    const offPause = onAppPause((paused) => {
++      if (paused) {
++        saveResume();
++        audio.suspendForBackground();
++      } else audio.resumeFromBackground();
++    });
+     setDpr(applyBoot());
+-    const onVis = () => {
+-      if (document.visibilityState === "visible") audio.resume();
+-    };
+-    document.addEventListener("visibilitychange", onVis);
+-    // Theme cycle 7: menu music. Fetch the menu loop now (no audio context yet), then
+-    // start it on the first touch, which is when browsers allow sound.
+-    if (sim.sound && sim.music) audio.prefetchTracks([MENU_TRACK]);
++    resumeIfAsked();
++    // Menu music at launch (0.12.7): fetch and decode the menu loop now and ask for it straight
++    // away. It streams while it decodes, so it is heard at once where autoplay is allowed (the
++    // Android app); in a browser it starts on the first touch, which unlocks sound.
++    if (sim.sound && sim.music) {
++      audio.bootTrack(MENU_TRACK);
++      if (sim.phase === "menu" && !audio.trackWanted) sim.menuMusic();
++    }
+     const onFirst = () => {
+       window.removeEventListener("pointerdown", onFirst, true);
+       window.removeEventListener("keydown", onFirst, true);
+@@ -35,7 +89,7 @@
+     window.addEventListener("pointerdown", onFirst, true);
+     window.addEventListener("keydown", onFirst, true);
+     return () => {
+-      document.removeEventListener("visibilitychange", onVis);
++      offPause();
+       window.removeEventListener("pointerdown", onFirst, true);
+       window.removeEventListener("keydown", onFirst, true);
+     };
+diff -ruN s4/game/src/game/Scene.tsx s5/game/src/game/Scene.tsx
+--- s4/game/src/game/Scene.tsx	2026-11-13 22:40:50.000000000 +0000
++++ s5/game/src/game/Scene.tsx	2026-11-14 17:02:11.113844165 +0000
+@@ -1,3 +1,4 @@
++import { isAppPaused } from "./lifecycle";
+ import { useFrame, useThree } from "@react-three/fiber";
+ import { SafeRoundedBox as RoundedBox } from "./house/SafeRoundedBox";
+ import { restOn } from "./house/rest";
+@@ -1202,7 +1203,8 @@
+     sim.triangles = gl.info.render.triangles;
+     gl.info.autoReset = false;
+     gl.info.reset();
+-    if (!sim.frozen) sim.step(delta);
++    // In the background (lifecycle.ts) the world stands still, so it is just as it was on return.
++    if (!sim.frozen && !isAppPaused()) sim.step(delta);
+     sim.frames += 1;
+     const inst = 1 / Math.max(delta, 1 / 120);
+     sim.fps += (inst - sim.fps) * 0.08;
+diff -ruN s4/game/src/game/audio.ts s5/game/src/game/audio.ts
+--- s4/game/src/game/audio.ts	2026-11-13 23:47:09.000000000 +0000
++++ s5/game/src/game/audio.ts	2026-11-14 17:21:25.184577112 +0000
+@@ -34,6 +34,29 @@
+ const TRACK_CALM = 0.6;
+ const TRACK_FADE_IN = 1.6;
+ const TRACK_FADE_OUT = 0.6;
++/** The first music of a session (the menu at launch) fades in quickly, so it is heard straight away. */
++const TRACK_QUICK_FADE_IN = 0.45;
++/** Stream-to-buffer handover crossfade (same file, same spot, so it is inaudible). */
++const TRACK_HANDOVER = 0.12;
++
++/**
++ * Short first segments (`audio/<id>-intro.*`, the first seconds of the same file, sample-aligned).
++ * They decode in a blink, so the menu music starts at once; the full loop takes over at the very
++ * same sample when it has decoded.
++ */
++const TRACK_INTRO: Partial<Record<TrackId, number>> = { dailybeetle: 12 };
++
++type TrackPlay = {
++  id: TrackId;
++  /** The seamless decoded loop, once it is ready. */
++  src: AudioBufferSourceNode | null;
++  /** Quick start: the file streamed through an audio element while the loop decodes. */
++  el: HTMLAudioElement | null;
++  node: MediaElementAudioSourceNode | null;
++  gain: GainNode;
++  /** Playing the intro segment (src, not looping): the context time it started at. */
++  introAt?: number;
++};
+ 
+ 
+ export type MenuTap = "pots" | "balloons" | "bubbles" | "fish" | "box" | "piano" | "colouring" | "pad" | "pick";
+@@ -109,10 +132,19 @@
+   private meadowTimer: ReturnType<typeof setTimeout> | null = null;
+   private trackBus: GainNode | null = null;
+   private trackLoads = new Map<TrackId, Promise<{ buf: AudioBuffer; aac: boolean } | null>>();
+-  private track: { id: TrackId; src: AudioBufferSourceNode; gain: GainNode } | null = null;
++  private track: TrackPlay | null = null;
++  private decoded = new Map<TrackId, { buf: AudioBuffer; aac: boolean }>();
++  private firstTrack = true;
++  private introLoads = new Map<TrackId, Promise<{ buf: AudioBuffer; aac: boolean } | null>>();
+   /** The track the current screen wants, even while it is still loading or muted. */
+   trackWanted: TrackId | null = null;
+   private trackToken = 0;
++  /** True while the app is in the background (see lifecycle.ts): the context is suspended. */
++  private bgPaused = false;
++  /** The colouring pad was running when the app went to the background; restart it on return. */
++  private padWanted = false;
++  private oceanTick: (() => void) | null = null;
++  private meadowTick: (() => void) | null = null;
+ 
+   private ensure() {
+     if (this.ctx) return;
+@@ -121,6 +153,9 @@
+       (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+     if (!Ctx) return;
+     const ctx = new Ctx({ latencyHint: "interactive" });
++    AudioBus.contexts += 1;
++    // Created while backgrounded (a late tap timer): stay silent until the app is in front.
++    if (this.bgPaused && ctx.state === "running") void ctx.suspend().catch(() => {});
+     const master = ctx.createGain();
+     const music = ctx.createGain();
+     const sfx = ctx.createGain();
+@@ -160,13 +195,139 @@
+ 
+   unlock() {
+     this.ensure();
++    // Never wake the context while the app is in the background.
++    if (this.bgPaused) return;
+     if (this.ctx && this.ctx.state === "suspended") void this.ctx.resume();
++    this.playStream();
++  }
++
++  /** A streamed quick start that autoplay held back gets going on the first touch. */
++  private playStream() {
++    const el = this.track?.el;
++    if (el && el.paused && !this.bgPaused) void el.play().catch(() => {});
++  }
++
++  /**
++   * At launch: make the context and start fetching and decoding the menu loop straight away, so
++   * the menu music can start without waiting for a tap (Android WebView allows it) or, in a
++   * browser, the moment the first tap unlocks sound.
++   */
++  bootTrack(id: TrackId) {
++    if (!this.enabled) return;
++    this.ensure();
++    const intro = this.loadIntro(id);
++    if (intro) void intro.then(() => this.loadTrack(id));
++    else void this.loadTrack(id);
++  }
++
++  /** The intro segment of a track, decoded (null if the track has none or it fails). */
++  private loadIntro(id: TrackId) {
++    if (!TRACK_INTRO[id] || !this.ctx) return null;
++    let load = this.introLoads.get(id);
++    if (load) return load;
++    const ctx = this.ctx;
++    const ext = this.trackOrder()[0]!;
++    load = fetch(publicUrl(`audio/${id}-intro.${ext}`))
++      .then((res) => (res.ok ? res.arrayBuffer() : null))
++      .then(
++        (bytes) =>
++          bytes
++            ? new Promise<{ buf: AudioBuffer; aac: boolean } | null>((resolve) => {
++                const out = ctx.decodeAudioData(bytes, (buf) => resolve({ buf, aac: ext === "m4a" }), () => resolve(null)) as Promise<AudioBuffer> | undefined;
++                if (out && typeof out.catch === "function") out.catch(() => resolve(null));
++              })
++            : null,
++      )
++      .catch(() => null);
++    this.introLoads.set(id, load);
++    return load;
+   }
+ 
+   resume() {
++    if (this.bgPaused) return;
+     if (this.ctx && this.ctx.state === "suspended") void this.ctx.resume();
+   }
+ 
++  get backgrounded() {
++    return this.bgPaused;
++  }
++
++  /**
++   * The app went to the background (home button, recents, screen off, another app): suspend the
++   * context so every track, pad and sound stops where it is, halt the timers that schedule music,
++   * and pause any media element on the page. Nothing is thrown away, so resumeFromBackground()
++   * carries on with the same screen's music and nothing else.
++   */
++  suspendForBackground() {
++    if (this.bgPaused) return;
++    this.bgPaused = true;
++    if (this.timer != null) {
++      clearTimeout(this.timer);
++      this.timer = null;
++      this.padWanted = true;
++    }
++    if (this.oceanTimer != null) {
++      clearTimeout(this.oceanTimer);
++      this.oceanTimer = null;
++    }
++    if (this.meadowTimer != null) {
++      clearTimeout(this.meadowTimer);
++      this.meadowTimer = null;
++    }
++    if (this.ctx && this.ctx.state === "running") void this.ctx.suspend().catch(() => {});
++    if (this.track?.el) this.track.el.pause();
++    if (typeof document !== "undefined") {
++      for (const el of document.querySelectorAll<HTMLMediaElement>("audio, video")) {
++        try {
++          el.pause();
++        } catch {
++          /* detached */
++        }
++      }
++    }
++  }
++
++  /** Back in front: wake the context and restart only what the current screen wants. */
++  resumeFromBackground() {
++    if (!this.bgPaused) return;
++    this.bgPaused = false;
++    // Single owner: whatever is playing must be the track the current screen asked for.
++    if (this.track && this.track.id !== this.trackWanted) this.fadeOutTrack(0.05);
++    if (this.trackWanted && !this.track && this.enabled) this.playTrack(this.trackWanted);
++    if (this.padWanted) {
++      this.padWanted = false;
++      if (this.enabled) this.startMusic();
++    }
++    if (this.ocean && this.oceanTimer == null && this.oceanTick) this.oceanTimer = setTimeout(this.oceanTick, 1600);
++    if (this.meadow && this.meadowTimer == null && this.meadowTick) this.meadowTimer = setTimeout(this.meadowTick, 900);
++    if (this.ctx && this.ctx.state !== "running" && this.ctx.state !== "closed") void this.ctx.resume().catch(() => {});
++    this.playStream();
++  }
++
++  /** Test read-out: the context state and every running music source. */
++  bgStats() {
++    return {
++      ctx: this.ctx ? this.ctx.state : "none",
++      bgPaused: this.bgPaused,
++      track: this.track?.id ?? null,
++      stream: !!this.track?.el,
++      intro: this.track?.introAt != null,
++      streamPlaying: !!this.track?.el && !this.track.el.paused,
++      trackWanted: this.trackWanted,
++      pad: this.timer != null,
++      padWanted: this.padWanted,
++      padVoices: this.padVoices.size,
++      ocean: !!this.ocean,
++      oceanTimer: this.oceanTimer != null,
++      meadow: !!this.meadow,
++      meadowTimer: this.meadowTimer != null,
++      contexts: AudioBus.contexts,
++    };
++  }
++
++  /** How many AudioContexts this page ever made (it must stay at most 1). */
++  static contexts = 0;
++
+   setEnabled(on: boolean) {
+     this.enabled = on;
+     if (!this.ctx || !this.master) return;
+@@ -238,7 +399,9 @@
+             const out = ctx.decodeAudioData(data, resolve, reject) as Promise<AudioBuffer> | undefined;
+             if (out && typeof out.catch === "function") out.catch(reject);
+           });
+-          return { buf, aac: ext === "m4a" };
++          const got = { buf, aac: ext === "m4a" };
++          this.decoded.set(id, got);
++          return got;
+         } catch {
+           /* try the next format */
+         }
+@@ -270,29 +433,208 @@
+     if (!this.enabled) return;
+     this.ensure();
+     if (!this.ctx) return;
+-    void this.loadTrack(id).then((loaded) => {
++    const fadeIn = this.firstTrack ? TRACK_QUICK_FADE_IN : TRACK_FADE_IN;
++    this.firstTrack = false;
++    const ready = this.decoded.get(id);
++    if (ready) {
++      this.startLoop(id, ready, fadeIn, 0, 0.0001);
++      return;
++    }
++    // Not decoded yet (a long file takes seconds on a phone). With an intro segment: play that
++    // now and switch to the loop at the same sample. Otherwise stream the file meanwhile.
++    const intro = this.loadIntro(id);
++    if (intro) {
++      void intro.then((seg) => {
++        if (token !== this.trackToken || !this.ctx || !this.enabled || this.trackWanted !== id || this.track) return;
++        const full = this.decoded.get(id);
++        if (full) this.startLoop(id, full, fadeIn, 0, 0.0001);
++        else if (seg) this.startIntro(id, seg, fadeIn);
++        else this.startStream(id, fadeIn);
++      });
++    } else this.startStream(id, fadeIn);
++    // With an intro, decode the long loop only after the intro, so the intro is never held up.
++    const full = intro ? intro.then(() => this.loadTrack(id)) : this.loadTrack(id);
++    void full.then((loaded) => {
+       if (!loaded || token !== this.trackToken || !this.ctx || !this.trackBus || !this.enabled) return;
+       if (this.trackWanted !== id) return;
+-      const ctx = this.ctx;
+-      const src = ctx.createBufferSource();
+-      src.buffer = loaded.buf;
+-      src.loop = true;
+-      if (loaded.aac) {
+-        // AAC pads the end to a whole frame. Loop only the real samples.
+-        src.loopStart = 0;
+-        src.loopEnd = Math.min(loaded.buf.duration, TRACK_SAMPLES[id] / 44100);
+-      }
+-      const gain = ctx.createGain();
+-      const now = ctx.currentTime;
+-      gain.gain.setValueAtTime(0.0001, now);
+-      gain.gain.exponentialRampToValueAtTime(this.trackLevel(id), now + TRACK_FADE_IN);
+-      src.connect(gain);
+-      gain.connect(this.trackBus);
+-      src.start(now);
+-      this.track = { id, src, gain };
++      const cur = this.track;
++      if (cur && cur.id === id && cur.el) this.handOver(cur, loaded);
++      else if (cur && cur.id === id && cur.introAt != null) this.handOverIntro(cur, loaded);
++      else if (!cur) this.startLoop(id, loaded, fadeIn, 0, 0.0001);
+     });
+   }
+ 
++  private loopEnd(id: TrackId, loaded: { buf: AudioBuffer; aac: boolean }) {
++    return loaded.aac ? Math.min(loaded.buf.duration, TRACK_SAMPLES[id] / 44100) : loaded.buf.duration;
++  }
++
++  private startLoop(id: TrackId, loaded: { buf: AudioBuffer; aac: boolean }, fadeIn: number, offset: number, from: number) {
++    if (!this.ctx || !this.trackBus) return;
++    const ctx = this.ctx;
++    const src = ctx.createBufferSource();
++    src.buffer = loaded.buf;
++    src.loop = true;
++    if (loaded.aac) {
++      // AAC pads the end to a whole frame. Loop only the real samples.
++      src.loopStart = 0;
++      src.loopEnd = this.loopEnd(id, loaded);
++    }
++    const gain = ctx.createGain();
++    const now = ctx.currentTime;
++    gain.gain.setValueAtTime(Math.max(0.0001, from), now);
++    gain.gain.exponentialRampToValueAtTime(this.trackLevel(id), now + fadeIn);
++    src.connect(gain);
++    gain.connect(this.trackBus);
++    src.start(now, offset);
++    this.track = { id, src, el: null, node: null, gain };
++  }
++
++  private startIntro(id: TrackId, seg: { buf: AudioBuffer; aac: boolean }, fadeIn: number) {
++    if (!this.ctx || !this.trackBus) return;
++    const ctx = this.ctx;
++    const src = ctx.createBufferSource();
++    src.buffer = seg.buf;
++    const gain = ctx.createGain();
++    const now = ctx.currentTime;
++    const level = this.trackLevel(id);
++    // Begin soft but already audible and rise to full over the quick fade.
++    gain.gain.setValueAtTime(level * 0.35, now);
++    gain.gain.linearRampToValueAtTime(level, now + fadeIn);
++    src.connect(gain);
++    gain.connect(this.trackBus);
++    src.start(now);
++    this.track = { id, src, el: null, node: null, gain, introAt: now };
++    // Intro ran out before the loop decoded (a very slow phone): carry on with the loop when ready.
++    src.onended = () => {
++      if (this.track && this.track.src === src) {
++        gain.disconnect();
++        this.track = null;
++        const full = this.decoded.get(id);
++        if (full && this.trackWanted === id && this.enabled) this.startLoop(id, full, TRACK_HANDOVER, seg.buf.duration % this.loopEnd(id, full), 0.0001);
++      } else src.disconnect();
++    };
++  }
++
++  /** Intro to loop, sample-aligned: the loop starts exactly where the intro is, a 15 ms crossfade. */
++  private handOverIntro(cur: TrackPlay, loaded: { buf: AudioBuffer; aac: boolean }) {
++    if (!this.ctx || !this.trackBus || !cur.src || cur.introAt == null) return;
++    const ctx = this.ctx;
++    const at = ctx.currentTime + 0.06;
++    const offset = at - cur.introAt;
++    const segLen = cur.src.buffer ? cur.src.buffer.duration : 0;
++    if (offset >= segLen - 0.05) return; // onended takes over instead
++    const x = 0.015;
++    const src = ctx.createBufferSource();
++    src.buffer = loaded.buf;
++    src.loop = true;
++    if (loaded.aac) {
++      src.loopStart = 0;
++      src.loopEnd = this.loopEnd(cur.id, loaded);
++    }
++    const gain = ctx.createGain();
++    // Follow the intro's level (it may still be fading in), then finish the fade on the loop.
++    const level = Math.max(0.0001, cur.gain.gain.value);
++    const target = this.trackLevel(cur.id);
++    gain.gain.setValueAtTime(0.0001, at);
++    gain.gain.linearRampToValueAtTime(level, at + x);
++    if (level < target) gain.gain.linearRampToValueAtTime(target, at + x + TRACK_QUICK_FADE_IN);
++    src.connect(gain);
++    gain.connect(this.trackBus);
++    src.start(at, offset);
++    cur.gain.gain.cancelScheduledValues(at);
++    cur.gain.gain.setValueAtTime(level, at);
++    cur.gain.gain.linearRampToValueAtTime(0.0001, at + x);
++    const old = cur.src;
++    old.onended = () => {
++      old.disconnect();
++      cur.gain.disconnect();
++    };
++    try {
++      old.stop(at + x + 0.01);
++    } catch {
++      /* already stopped */
++    }
++    this.track = { id: cur.id, src, el: null, node: null, gain };
++  }
++
++  private startStream(id: TrackId, fadeIn: number) {
++    if (!this.ctx || !this.trackBus || typeof Audio === "undefined") return;
++    const ctx = this.ctx;
++    let el: HTMLAudioElement;
++    let node: MediaElementAudioSourceNode;
++    try {
++      el = new Audio();
++      el.preload = "auto";
++      el.loop = true;
++      el.src = publicUrl(`audio/${id}.${this.trackOrder()[0]}`);
++      node = ctx.createMediaElementSource(el);
++    } catch {
++      return;
++    }
++    const gain = ctx.createGain();
++    const now = ctx.currentTime;
++    // Quick start: begin soft but already audible and rise to full over the fade, so the first
++    // notes are heard as soon as the file plays (an exponential rise from silence hides them).
++    const level = this.trackLevel(id);
++    if (fadeIn <= TRACK_QUICK_FADE_IN) {
++      gain.gain.setValueAtTime(level * 0.35, now);
++      gain.gain.linearRampToValueAtTime(level, now + fadeIn);
++    } else {
++      gain.gain.setValueAtTime(0.0001, now);
++      gain.gain.exponentialRampToValueAtTime(level, now + fadeIn);
++    }
++    node.connect(gain);
++    gain.connect(this.trackBus);
++    this.track = { id, src: null, el, node, gain };
++    if (!this.bgPaused) void el.play().catch(() => {});
++  }
++
++  /** Stream to decoded loop: start the loop where the stream is and crossfade (same file). */
++  private handOver(cur: TrackPlay, loaded: { buf: AudioBuffer; aac: boolean }) {
++    if (!this.ctx || !cur.el) return;
++    const len = this.loopEnd(cur.id, loaded);
++    const at = cur.el.paused && cur.el.currentTime === 0 ? 0 : (cur.el.currentTime + 0.02) % len;
++    const level = cur.gain.gain.value;
++    const target = this.trackLevel(cur.id);
++    this.retire(cur, TRACK_HANDOVER);
++    // Carry on the fade-in from where the stream had got to.
++    this.startLoop(cur.id, loaded, level >= target * 0.9 ? TRACK_HANDOVER : TRACK_QUICK_FADE_IN, at, Math.max(level, 0.0001));
++  }
++
++  /** Fade one playing track out and free it. */
++  private retire(cur: TrackPlay, seconds: number) {
++    if (!this.ctx) return;
++    const t = this.ctx.currentTime;
++    cur.gain.gain.cancelScheduledValues(t);
++    cur.gain.gain.setValueAtTime(Math.max(0.0001, cur.gain.gain.value), t);
++    cur.gain.gain.exponentialRampToValueAtTime(0.0001, t + seconds);
++    if (cur.src) {
++      const src = cur.src;
++      try {
++        src.stop(t + seconds + 0.05);
++      } catch {
++        /* already stopped */
++      }
++      src.onended = () => {
++        src.disconnect();
++        cur.gain.disconnect();
++      };
++    }
++    if (cur.el) {
++      const el = cur.el;
++      const done = () => {
++        el.pause();
++        el.removeAttribute("src");
++        el.load();
++        cur.node?.disconnect();
++        cur.gain.disconnect();
++      };
++      // In the background the context clock stands still, so do not wait for the fade.
++      if (this.bgPaused) done();
++      else setTimeout(done, (seconds + 0.08) * 1000);
++    }
++  }
++
+   private trackLevel(id: TrackId) {
+     return TRACK_LEVEL[id] * (this.calm ? TRACK_CALM : 1);
+   }
+@@ -301,19 +643,7 @@
+     const cur = this.track;
+     this.track = null;
+     if (!cur || !this.ctx) return;
+-    const t = this.ctx.currentTime;
+-    cur.gain.gain.cancelScheduledValues(t);
+-    cur.gain.gain.setValueAtTime(Math.max(0.0001, cur.gain.gain.value), t);
+-    cur.gain.gain.exponentialRampToValueAtTime(0.0001, t + seconds);
+-    try {
+-      cur.src.stop(t + seconds + 0.05);
+-    } catch {
+-      /* already stopped */
+-    }
+-    cur.src.onended = () => {
+-      cur.src.disconnect();
+-      cur.gain.disconnect();
+-    };
++    this.retire(cur, seconds);
+   }
+ 
+   trackStats() {
+@@ -350,6 +680,10 @@
+ 
+   startMusic() {
+     if (!this.enabled) return;
++    if (this.bgPaused) {
++      this.padWanted = true;
++      return;
++    }
+     this.ensure();
+     if (!this.ctx || this.timer != null) return;
+     this.nextTime = this.ctx.currentTime + 0.12;
+@@ -358,6 +692,11 @@
+         this.timer = null;
+         return;
+       }
++      if (this.bgPaused) {
++        this.timer = null;
++        this.padWanted = true;
++        return;
++      }
+       let guard = 0;
+       while (this.nextTime < this.ctx.currentTime + 0.6 && guard < 2) {
+         const chord = PAD_CHORDS[this.padIndex % PAD_CHORDS.length]!;
+@@ -374,6 +713,7 @@
+   }
+ 
+   stopMusic() {
++    this.padWanted = false;
+     if (this.timer != null) {
+       clearTimeout(this.timer);
+       this.timer = null;
+@@ -547,11 +887,12 @@
+     this.ocean = { gain: master, oscs, extras };
+     this.oceanNoise = false;
+     const tick = () => {
+-      if (!this.ocean || !this.ctx || !this.enabled) return;
++      if (!this.ocean || !this.ctx || !this.enabled || this.bgPaused) return;
+       if (Math.random() < 0.65) this.bubbleSweep(this.ctx.currentTime);
+       this.oceanTimer = setTimeout(tick, 1600 + Math.random() * 1400);
+     };
+-    this.oceanTimer = setTimeout(tick, 1600);
++    this.oceanTick = tick;
++    if (!this.bgPaused) this.oceanTimer = setTimeout(tick, 1600);
+   }
+ 
+   stopOcean() {
+@@ -745,12 +1086,13 @@
+     this.meadow = { gain: master, oscs, extras };
+     this.meadowNoise = false;
+     const chirp = () => {
+-      if (!this.meadow || !this.ctx) return;
++      if (!this.meadow || !this.ctx || this.bgPaused) return;
+       const note = [76, 79, 81, 84][Math.floor(Math.random() * 4)]!;
+       this.tone(this.ctx.currentTime, note, 0.12, this.calm ? 0.01 : 0.016, "sine", this.sfx);
+       this.meadowTimer = setTimeout(chirp, 1600 + Math.random() * 2200);
+     };
+-    this.meadowTimer = setTimeout(chirp, 700);
++    this.meadowTick = chirp;
++    if (!this.bgPaused) this.meadowTimer = setTimeout(chirp, 700);
+   }
+ 
+   stopMeadow() {
+@@ -1607,4 +1949,31 @@
+   }
+ }
+ 
++/**
++ * Background gate: while the app is in the background no sound method schedules anything (a late
++ * timer would otherwise queue notes on the frozen clock, and they would all burst out together on
++ * return). Control and music-bed methods stay callable so the current screen can still say what
++ * it wants.
++ */
++const BG_ALLOWED = new Set([
++  "constructor", "ensure", "unlock", "resume", "suspendForBackground", "resumeFromBackground", "bgStats",
++  "setEnabled", "trackOrder", "fetchTrackBytes", "prefetchTracks", "preloadTrack", "loadTrack", "setTrack",
++  "playTrack", "trackLevel", "fadeOutTrack", "bootTrack", "playStream", "loopEnd", "startLoop", "startStream", "handOver", "retire", "loadIntro", "startIntro", "handOverIntro", "trackStats", "applyCalmBed", "stats", "bedLevel", "startMusic",
++  "stopMusic", "startOcean", "stopOcean", "startMeadow", "stopMeadow", "stopHold", "takeVoice", "calmGain",
++  "preparePiano", "allowNote", "placeThock",
++]);
++for (const name of Object.getOwnPropertyNames(AudioBus.prototype)) {
++  if (BG_ALLOWED.has(name)) continue;
++  const desc = Object.getOwnPropertyDescriptor(AudioBus.prototype, name);
++  if (!desc || typeof desc.value !== "function") continue;
++  const fn = desc.value as (...args: unknown[]) => unknown;
++  Object.defineProperty(AudioBus.prototype, name, {
++    ...desc,
++    value: function (this: AudioBus, ...args: unknown[]) {
++      if (this.backgrounded) return name === "thock" ? false : undefined;
++      return fn.apply(this, args);
++    },
++  });
++}
++
+ export const audio = new AudioBus();
+diff -ruN s4/game/src/game/colouring/ColouringPlay.tsx s5/game/src/game/colouring/ColouringPlay.tsx
+--- s4/game/src/game/colouring/ColouringPlay.tsx	2026-10-28 09:56:31.000000000 +0000
++++ s5/game/src/game/colouring/ColouringPlay.tsx	2026-11-14 17:02:11.113844165 +0000
+@@ -1,3 +1,4 @@
++import { isAppPaused } from "../lifecycle";
+ import { memo, useEffect, useRef, useState } from "react";
+ import { audio } from "../audio";
+ import { sim } from "../sim";
+@@ -233,6 +234,11 @@
+     stage.addEventListener("pointerup", onStageUp, true);
+     stage.addEventListener("pointercancel", onStageUp, true);
+     const autoTick = window.setInterval(() => {
++      // In the background the idle clock stops, so coming back never skips to the next picture.
++      if (isAppPaused()) {
++        lastInput = performance.now();
++        return;
++      }
+       if (sliding || sim.grownUp || downs.size || board.busy) {
+         stamp();
+         return;
+diff -ruN s4/game/src/game/lifecycle.ts s5/game/src/game/lifecycle.ts
+--- s4/game/src/game/lifecycle.ts	1970-01-01 01:00:00.000000000 +0100
++++ s5/game/src/game/lifecycle.ts	2026-11-14 17:00:47.395386917 +0000
+@@ -0,0 +1,111 @@
++/**
++ * App lifecycle: the one place that decides "Pip's Pots is in the background".
++ *
++ * The app counts as paused while any reason holds:
++ *  - hidden: the page is hidden (home button, recents, screen off, another app) or pagehide;
++ *  - freeze: the browser froze the page (Page Lifecycle "freeze" event);
++ *  - blur:   the window lost focus (notification shade, a system dialog, another window);
++ *  - native: the Android wrapper said the Activity paused (window.__pipLifecycle.pause()).
++ *
++ * While paused, the audio bus is suspended (see audio.suspendForBackground), and the game loops
++ * (sim.step, the star sky, the painted pots, colouring's auto-advance, the piano song) stand
++ * still, so coming back finds the same game in the same state. There is no pause button: it all
++ * just carries on when the app is in front again.
++ */
++export type PauseReason = "hidden" | "freeze" | "blur" | "native";
++
++const reasons = new Set<PauseReason>();
++const listeners = new Set<(paused: boolean) => void>();
++let paused = false;
++let installed = false;
++
++type LifecycleWindow = Window & {
++  __pipPaused?: boolean;
++  __pipLifecycle?: {
++    pause: () => void;
++    resume: () => void;
++    paused: () => boolean;
++    reasons: () => PauseReason[];
++    log: { t: number; paused: boolean; why: string }[];
++  };
++};
++
++export function isAppPaused() {
++  return paused;
++}
++
++/** Called with true when the app goes to the background and false when it comes back. */
++export function onAppPause(fn: (paused: boolean) => void) {
++  listeners.add(fn);
++  return () => {
++    listeners.delete(fn);
++  };
++}
++
++function update(why: string) {
++  const next = reasons.size > 0;
++  if (next === paused) return;
++  paused = next;
++  if (typeof window !== "undefined") {
++    const w = window as LifecycleWindow;
++    w.__pipPaused = paused;
++    w.__pipLifecycle?.log.push({ t: Math.round(performance.now()), paused, why });
++    if (document.documentElement) document.documentElement.dataset.appPaused = paused ? "1" : "0";
++  }
++  for (const fn of [...listeners]) {
++    try {
++      fn(paused);
++    } catch (err) {
++      console.error(err);
++    }
++  }
++}
++
++function add(r: PauseReason, why: string = r) {
++  reasons.add(r);
++  update(why);
++}
++
++function clear(rs: PauseReason[], why: string) {
++  for (const r of rs) reasons.delete(r);
++  update(why);
++}
++
++/** Wire the page lifecycle events once. Safe to call more than once. */
++export function installLifecycle() {
++  if (installed || typeof window === "undefined" || typeof document === "undefined") return;
++  installed = true;
++  const w = window as LifecycleWindow;
++  w.__pipPaused = false;
++  w.__pipLifecycle = {
++    // The Android wrapper calls these from Activity.onPause / onResume.
++    pause: () => add("native"),
++    // Back in front: the Activity resumed, so the page is visible and focused as well.
++    resume: () => clear(["native", "hidden", "freeze", "blur"], "native-resume"),
++    paused: () => paused,
++    reasons: () => [...reasons],
++    log: [],
++  };
++  const onVis = () => {
++    if (document.visibilityState === "hidden") add("hidden", "visibilitychange");
++    // A page that becomes visible is in front again, whatever focus events did or did not fire.
++    else clear(["hidden", "freeze", "blur"], "visibilitychange");
++  };
++  document.addEventListener("visibilitychange", onVis);
++  window.addEventListener("pagehide", () => add("hidden", "pagehide"));
++  window.addEventListener("pageshow", () => {
++    if (document.visibilityState !== "hidden") clear(["hidden", "freeze"], "pageshow");
++  });
++  document.addEventListener("freeze", () => add("freeze"));
++  document.addEventListener("resume", () => clear(["freeze"], "resume"));
++  window.addEventListener("blur", () => add("blur"));
++  window.addEventListener("focus", () => clear(["blur"], "focus"));
++  // A touch means the app is in front. This runs first (capture, installed before the game's
++  // own listeners), so the tap that brings it back is heard.
++  const onTouch = () => {
++    if (reasons.has("blur")) clear(["blur"], "pointerdown");
++  };
++  window.addEventListener("pointerdown", onTouch, true);
++  window.addEventListener("keydown", onTouch, true);
++  if (document.visibilityState === "hidden") add("hidden", "boot-hidden");
++}
+diff -ruN s4/game/src/game/piano/PianoPlay.tsx s5/game/src/game/piano/PianoPlay.tsx
+--- s4/game/src/game/piano/PianoPlay.tsx	2026-11-14 16:11:13.114196555 +0000
++++ s5/game/src/game/piano/PianoPlay.tsx	2026-11-14 17:02:33.757426893 +0000
+@@ -1,3 +1,4 @@
++import { onAppPause } from "../lifecycle";
+ import { memo, useEffect, useRef } from "react";
+ import { audio } from "../audio";
+ import { sim } from "../sim";
+@@ -164,22 +165,22 @@
+     keys.addEventListener("pointercancel", onUp);
+     keys.addEventListener("lostpointercapture", onUp);
+ 
+-    const stopTune = () => {
++    // The song now playing, so going to the background can pause it mid-tune and carry on after.
++    let playing: { song: (typeof SONGS)[number]; beat: number; startedAt: number; pausedAt: number } | null = null;
++    const songHeld = new Set<number>();
++    const clearTuneTimers = () => {
+       for (const t of tuneTimers) window.clearTimeout(t);
+       tuneTimers = [];
++      for (const k of songHeld) release(k);
++      songHeld.clear();
++    };
++    const stopTune = () => {
++      clearTuneTimers();
++      playing = null;
+       tuneRef.current?.classList.remove("is-playing");
+     };
+-    const tune = () => {
+-      if (tuneTimers.length) {
+-        stopTune();
+-        return;
+-      }
+-      tuneRef.current?.classList.add("is-playing");
+-      // Each press plays the next song (a tap while one is playing just stops it).
+-      const song = SONGS[nextSong % SONGS.length]!;
+-      nextSong = (nextSong + 1) % SONGS.length;
+-      stage.dataset.song = song.id;
+-      const beat = song.beat * (sim.calmMotion ? 1.12 : 1);
++    /** Schedule the song's notes from `fromMs` into it (0 = the start). */
++    const schedule = (song: (typeof SONGS)[number], beat: number, fromMs: number) => {
+       let t = 0;
+       let played = 0;
+       for (const [k, beats] of song.notes) {
+@@ -188,16 +189,56 @@
+           // A song sparkles on every other note (keys, notes and Pip still answer every one), which
+           // keeps long, quick songs light on the main thread.
+           const sparkle = played++ % 2 === 0;
+-          tuneTimers.push(window.setTimeout(() => press(k, undefined, undefined, sparkle), at));
+-          tuneTimers.push(window.setTimeout(() => release(k), at + Math.max(0.12, beats * beat * 0.8) * 1000));
++          if (at >= fromMs) {
++            tuneTimers.push(
++              window.setTimeout(() => {
++                songHeld.add(k);
++                press(k, undefined, undefined, sparkle);
++              }, at - fromMs),
++            );
++            tuneTimers.push(
++              window.setTimeout(() => {
++                songHeld.delete(k);
++                release(k);
++              }, at - fromMs + Math.max(0.12, beats * beat * 0.8) * 1000),
++            );
++          }
+         }
+         t += beats;
+       }
+-      tuneTimers.push(window.setTimeout(stopTune, t * beat * 1000 + 60));
++      tuneTimers.push(window.setTimeout(stopTune, Math.max(0, t * beat * 1000 + 60 - fromMs)));
+     };
++    const tune = () => {
++      if (playing) {
++        stopTune();
++        return;
++      }
++      tuneRef.current?.classList.add("is-playing");
++      // Each press plays the next song (a tap while one is playing just stops it).
++      const song = SONGS[nextSong % SONGS.length]!;
++      nextSong = (nextSong + 1) % SONGS.length;
++      stage.dataset.song = song.id;
++      const beat = song.beat * (sim.calmMotion ? 1.12 : 1);
++      playing = { song, beat, startedAt: performance.now(), pausedAt: -1 };
++      schedule(song, beat, 0);
++    };
++    // Background: hold the song where it is; back in front: carry on from the same note.
++    const offPause = onAppPause((paused) => {
++      if (!playing) return;
++      if (paused) {
++        if (playing.pausedAt >= 0) return;
++        playing.pausedAt = performance.now() - playing.startedAt;
++        clearTuneTimers();
++      } else if (playing.pausedAt >= 0) {
++        const from = playing.pausedAt;
++        playing.startedAt = performance.now() - from;
++        playing.pausedAt = -1;
++        schedule(playing.song, playing.beat, from);
++      }
++    });
+     api.current = { press, release, stopTune, tune };
+     const w = window as unknown as { __pianoTest?: unknown };
+-    w.__pianoTest = { press, release, tune, stopTune, held: () => held.slice(), songs: () => SONGS.map((x) => ({ id: x.id, beat: x.beat, notes: x.notes })), nextSong: () => nextSong, setNext: (i: number) => { nextSong = i; } };
++    w.__pianoTest = { press, release, tune, stopTune, held: () => held.slice(), timers: () => tuneTimers.length, playing: () => (playing ? { id: playing.song.id, pausedAt: playing.pausedAt } : null), songs: () => SONGS.map((x) => ({ id: x.id, beat: x.beat, notes: x.notes })), nextSong: () => nextSong, setNext: (i: number) => { nextSong = i; } };
+ 
+     return () => {
+       keys.removeEventListener("pointerdown", onDown);
+@@ -205,6 +246,7 @@
+       keys.removeEventListener("pointerup", onUp);
+       keys.removeEventListener("pointercancel", onUp);
+       keys.removeEventListener("lostpointercapture", onUp);
++      offPause();
+       stopTune();
+       window.clearTimeout(singTimer);
+       window.clearTimeout(cheerTimer);
+diff -ruN s4/game/src/game/sim.ts s5/game/src/game/sim.ts
+--- s4/game/src/game/sim.ts	2026-11-13 23:43:08.000000000 +0000
++++ s5/game/src/game/sim.ts	2026-11-14 17:23:02.018792665 +0000
+@@ -1862,6 +1862,15 @@
+ if (typeof window !== "undefined") {
+   window.__pip = sim;
+   (window as unknown as { __pipAudio?: unknown }).__pipAudio = audio;
++  // Menu music at launch (0.12.7), as early as the script runs, before the 3D scene's first
++  // render ties up the page: the short intro segment (preloaded by spa.html) decodes in a blink
++  // and starts at once where autoplay is allowed (the Android app). In a browser the context
++  // waits for the first touch. A launch straight into a game (?mode=, ?resume=1) skips it.
++  const q = new URLSearchParams(window.location.search);
++  if (sim.sound && sim.music && sim.phase === "menu" && !q.has("mode") && q.get("resume") !== "1") {
++    audio.bootTrack(MENU_TRACK);
++    sim.menuMusic();
++  }
+ }
+ 
+ declare global {
+diff -ruN s4/game/src/game/stars/StarCatcher.tsx s5/game/src/game/stars/StarCatcher.tsx
+--- s4/game/src/game/stars/StarCatcher.tsx	2026-11-13 23:55:21.000000000 +0000
++++ s5/game/src/game/stars/StarCatcher.tsx	2026-11-14 17:02:11.113844165 +0000
+@@ -1,3 +1,4 @@
++import { isAppPaused } from "../lifecycle";
+ import { memo, useEffect, useMemo, useRef, useState } from "react";
+ import { audio } from "../audio";
+ import { sim } from "../sim";
+@@ -836,7 +837,7 @@
+     const frame = (now: number) => {
+       const dt = Math.min(0.05, Math.max(0, (now - last) / 1000));
+       last = now;
+-      if (!paused && !document.hidden) step(dt);
++      if (!paused && !document.hidden && !isAppPaused()) step(dt);
+       raf = requestAnimationFrame(frame);
+     };
+     raf = requestAnimationFrame(frame);
+--- s4/game/spa.html	2026-10-28 09:53:07.000000000 +0000
++++ s5/game/spa.html	2026-11-14 17:23:02.018792665 +0000
+@@ -6,6 +6,8 @@
+     <title>Pip's Pots</title>
+     <meta name="theme-color" content="#8fd4f8" />
+     <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
++    <!-- The first 12 s of the menu music, fetched with the page so it can play straight away. -->
++    <link rel="preload" href="./audio/dailybeetle-intro.ogg" as="fetch" type="audio/ogg" crossorigin />
+   </head>
+   <body>
+     <div id="root"></div>

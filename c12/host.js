@@ -99,6 +99,12 @@ export function startHost() {
       sig = next;
       game.bgKey = "";
     }
+    // App in the background (window.__pipPaused, lifecycle.ts): the pots stand still, so the
+    // game is exactly as it was when the player comes back.
+    if (window.__pipPaused) {
+      last = now;
+      return;
+    }
     resize();
     const dt = Math.min(0.25, Math.max(0, (now - last) / 1000 || 0.016));
     last = now;
