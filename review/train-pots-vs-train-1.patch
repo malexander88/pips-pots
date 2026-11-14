@@ -1,0 +1,15 @@
+diff --git a/c12/pots.js b/c12/pots.js
+index 0000000..b9a8aa7 100644
+--- a/c12/pots.js (origin/train-1)
++++ b/c12/pots.js
+@@ -303,7 +303,9 @@ function startDepart(game) {
+ function toot() {
+   const audio = window.__pipAudio;
+   const ctx = audio?.ctx;
+-  if (!ctx || audio.enabled === false) return;
++  // Same AudioContext as the rest of the game, so it is suspended in the background; and no
++  // new toots are scheduled while the app is backgrounded (0.12.8).
++  if (!ctx || audio.enabled === false || audio.backgrounded) return;
+   try {
+     const dest = audio.sfx || ctx.destination;
+     const t0 = ctx.currentTime;

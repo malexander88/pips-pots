@@ -3736,3 +3736,98 @@ diff -ruN orig/game/src/styles.css s5/game/src/styles.css
    pointer-events: none;
    animation: piano-pip-bob 1.15s ease-in-out infinite;
  }
+--- orig/game/src/game/menu/menuArt.ts	2026-11-14 18:24:26.527205083 +0000
++++ s6/game/src/game/menu/menuArt.ts	2026-11-14 18:24:26.527205083 +0000
+@@ -90,52 +90,51 @@
+   ctx.fill();
+ }
+ 
+-/* ------------------------------------------------------------- Colour sorting (pots) */
++/* ------------------------------------------------------------- Colour sorting (train) */
+ 
++// The colour-sorting card shows the train game (0.12.8): a smiling engine pulling three wagons,
++// one per colour, along a track.
+ export function paintPotsCard(ctx: Ctx, w: number, h: number) {
+   skyWash(ctx, w, h);
+-  cloud(ctx, w * 0.2, h * 0.17, w * 0.26, w, true);
+-  cloud(ctx, w * 0.8, h * 0.12, w * 0.2, w, true);
+-  hill(ctx, w, h, 0.62, 0.04, 0.4, SCENERY.grassLight, SCENERY.grassDark);
+-  // Table plank.
+-  contact(ctx, w * 0.5, h * 0.86, w * 0.44, h * 0.04);
+-  celRoundRect(ctx, w, w * 0.06, h * 0.74, w * 0.88, h * 0.09, h * 0.04, SCENERY.wood, W);
+-  const pots: ColorId[] = ["red", "yellow", "blue"];
+-  const pw = w * 0.25;
+-  pots.forEach((c, i) => {
+-    const cx = w * (0.2 + i * 0.3);
+-    const base = h * 0.75;
+-    const top = base - pw * 0.92;
++  cloud(ctx, w * 0.18, h * 0.16, w * 0.22, w, true);
++  cloud(ctx, w * 0.82, h * 0.12, w * 0.18, w, true);
++  hill(ctx, w, h, 0.72, 0.04, 0.3, SCENERY.grassLight, SCENERY.grassDark);
++  // Two rails.
++  const rail = h * 0.88;
++  ctx.strokeStyle = SCENE_INK;
++  ctx.lineWidth = Math.max(3, w * W);
++  ctx.lineCap = "round";
++  ctx.beginPath();
++  ctx.moveTo(w * 0.02, rail);
++  ctx.lineTo(w * 0.98, rail);
++  ctx.moveTo(w * 0.02, rail + h * 0.05);
++  ctx.lineTo(w * 0.98, rail + h * 0.05);
++  ctx.stroke();
++  // Engine: yellow body, blue cab and chimney, two wheels, a smile.
++  const ew = w * 0.26;
++  const axle = h * 0.78;
++  const body = punch("yellow");
++  const cab = punch("blue");
++  cel(ctx, w, () => ctx.roundRect(w * 0.04, axle - ew * 0.62, ew * 0.7, ew * 0.58, ew * 0.2), body.base, w * 0.08, axle - ew * 0.4, ew * 0.35, W);
++  cel(ctx, w, () => ctx.roundRect(w * 0.2, axle - ew * 0.86, ew * 0.38, ew * 0.8, 7), cab.base, w * 0.26, axle - ew * 0.5, ew * 0.28, W);
++  cel(ctx, w, () => ctx.roundRect(w * 0.12, axle - ew * 1.02, ew * 0.16, ew * 0.26, 3), cab.base, w * 0.14, axle - ew * 0.9, ew * 0.14, W);
++  celEllipse(ctx, w, w * 0.1, axle, ew * 0.14, ew * 0.14, SCENE_INK, W);
++  celEllipse(ctx, w, w * 0.26, axle, ew * 0.14, ew * 0.14, SCENE_INK, W);
++  face(ctx, w * 0.14, axle - ew * 0.34, ew * 0.3, "smile");
++  // Three wagons, one per colour.
++  const wagons: ColorId[] = ["red", "yellow", "blue"];
++  wagons.forEach((c, i) => {
++    const cx = w * (0.42 + i * 0.2);
++    const cw = w * 0.175;
++    const top = axle - cw * 0.82;
+     const p = punch(c);
+-    cel(
+-      ctx,
+-      w,
+-      () => {
+-        ctx.moveTo(cx - pw * 0.5, top);
+-        ctx.lineTo(cx + pw * 0.5, top);
+-        ctx.quadraticCurveTo(cx + pw * 0.52, base, cx + pw * 0.3, base);
+-        ctx.lineTo(cx - pw * 0.3, base);
+-        ctx.quadraticCurveTo(cx - pw * 0.52, base, cx - pw * 0.5, top);
+-        ctx.closePath();
+-      },
+-      p.base,
+-      cx - pw * 0.22,
+-      top + pw * 0.2,
+-      pw * 0.5,
+-      W,
+-    );
+-    // Rim with a dark opening.
+-    celEllipse(ctx, w, cx, top, pw * 0.58, pw * 0.16, p.light, W);
+-    ctx.beginPath();
+-    ctx.ellipse(cx, top, pw * 0.44, pw * 0.09, 0, 0, Math.PI * 2);
+-    ctx.fillStyle = p.dark;
+-    ctx.fill();
+-    face(ctx, cx, top + pw * 0.48, pw * 0.42, i === 1 ? "wink" : "smile");
++    cel(ctx, w, () => ctx.roundRect(cx - cw * 0.5, top, cw, cw * 0.82, 6), p.base, cx - cw * 0.2, top + cw * 0.3, cw * 0.5, W);
++    celEllipse(ctx, w, cx - cw * 0.28, axle, cw * 0.14, cw * 0.14, SCENE_INK, W);
++    celEllipse(ctx, w, cx + cw * 0.28, axle, cw * 0.14, cw * 0.14, SCENE_INK, W);
++    face(ctx, cx, top + cw * 0.48, cw * 0.48, i === 1 ? "wink" : "smile");
+   });
+-  // A ball dropping into the red pot, with a sparkle.
+-  celEllipse(ctx, w, w * 0.2, h * 0.24, w * 0.075, w * 0.075, PUNCH.red.base, W);
+-  sparkle(ctx, w * 0.32, h * 0.2, w * 0.045, "#ffffff");
+-  sparkle(ctx, w * 0.1, h * 0.32, w * 0.03, "#fff6b0");
++  sparkle(ctx, w * 0.3, h * 0.18, w * 0.04, "#ffffff");
++  sparkle(ctx, w * 0.08, h * 0.28, w * 0.03, "#fff6b0");
+ }
+ 
+ /* ------------------------------------------------------------- Balloon Pop */
