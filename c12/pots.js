@@ -307,28 +307,86 @@ function toot() {
   // new toots are scheduled while the app is backgrounded (0.12.8).
   if (!ctx || audio.enabled === false || audio.backgrounded) return;
   try {
-    const dest = audio.sfx || ctx.destination;
-    const t0 = ctx.currentTime;
-    const beep = (when, freq, dur) => {
-      const o = ctx.createOscillator();
-      const g = ctx.createGain();
-      o.type = "sine";
-      o.frequency.setValueAtTime(freq, when);
-      o.frequency.linearRampToValueAtTime(freq * 1.08, when + dur * 0.45);
-      g.gain.setValueAtTime(0, when);
-      g.gain.linearRampToValueAtTime(0.09, when + 0.03);
-      g.gain.linearRampToValueAtTime(0.05, when + dur * 0.5);
-      g.gain.linearRampToValueAtTime(0, when + dur);
-      o.connect(g);
-      g.connect(dest);
-      o.start(when);
-      o.stop(when + dur + 0.02);
-    };
-    beep(t0, 392, 0.2);
-    beep(t0 + 0.18, 523.25, 0.32);
+    // Just after the departure fanfare, so the two don't blur together.
+    chooChoo(ctx, audio.sfx || ctx.destination, ctx.currentTime + 0.5);
   } catch {
     /* missing audio graph should not break play */
   }
+}
+
+/**
+ * "Choo choo" (0.12.9): two soft steam-whistle toots. Each toot is a gentle major chord
+ * (three soft sine/triangle pipes) that slides up a touch as it starts, with a little breath
+ * of filtered noise, all through a low-pass so nothing is sharp. Peak level is about the same
+ * as the other game sounds (their single tones peak at 0.03-0.07 on the sfx bus).
+ */
+export function chooChoo(ctx, dest, t0) {
+  const out = ctx.createBiquadFilter();
+  out.type = "lowpass";
+  out.frequency.value = 2400;
+  out.Q.value = 0.5;
+  out.connect(dest);
+  const len = Math.floor(ctx.sampleRate * 0.6);
+  const noise = ctx.createBuffer(1, len, ctx.sampleRate);
+  const nd = noise.getChannelData(0);
+  let seed = 7;
+  for (let i = 0; i < len; i++) {
+    seed = (seed * 16807) % 2147483647;
+    nd[i] = (seed / 2147483647) * 2 - 1;
+  }
+  const pipes = [
+    [587.33, "sine", 0.026], // D5
+    [739.99, "sine", 0.02], // F#5
+    [880, "triangle", 0.014], // A5
+  ];
+  const whistle = (start, dur) => {
+    const env = ctx.createGain();
+    env.gain.setValueAtTime(0.0001, start);
+    env.gain.exponentialRampToValueAtTime(1, start + 0.07);
+    env.gain.setValueAtTime(1, start + dur - 0.14);
+    env.gain.exponentialRampToValueAtTime(0.0001, start + dur);
+    env.connect(out);
+    // A slow, shallow wobble so it sounds blown, not beeped.
+    const lfo = ctx.createOscillator();
+    const lfoAmt = ctx.createGain();
+    lfo.frequency.value = 5.2;
+    lfoAmt.gain.value = 3.5;
+    lfo.connect(lfoAmt);
+    lfo.start(start);
+    lfo.stop(start + dur + 0.05);
+    for (const [f, type, peak] of pipes) {
+      const o = ctx.createOscillator();
+      const g = ctx.createGain();
+      o.type = type;
+      o.frequency.setValueAtTime(f * 0.94, start);
+      o.frequency.exponentialRampToValueAtTime(f, start + 0.09);
+      lfoAmt.connect(o.frequency);
+      g.gain.value = peak;
+      o.connect(g);
+      g.connect(env);
+      o.start(start);
+      o.stop(start + dur + 0.05);
+    }
+    // Breath: noise band-passed around the lowest pipe, strongest at the start.
+    const n = ctx.createBufferSource();
+    n.buffer = noise;
+    const bp = ctx.createBiquadFilter();
+    bp.type = "bandpass";
+    bp.frequency.value = 650;
+    bp.Q.value = 1.4;
+    const ng = ctx.createGain();
+    ng.gain.setValueAtTime(0.0001, start);
+    ng.gain.exponentialRampToValueAtTime(0.03, start + 0.05);
+    ng.gain.exponentialRampToValueAtTime(0.008, start + 0.2);
+    ng.gain.exponentialRampToValueAtTime(0.0001, start + dur);
+    n.connect(bp);
+    bp.connect(ng);
+    ng.connect(out);
+    n.start(start);
+    n.stop(start + dur + 0.05);
+  };
+  whistle(t0, 0.32); // "choo"
+  whistle(t0 + 0.44, 0.5); // "choo"
 }
 
 export function stepPots(game, dt, w, h) {
@@ -1181,8 +1239,14 @@ function drawSteam(ctx, game, line) {
   }
 }
 
+// Per-kind scale so every cargo reads about the same size (0.12.9). Measured as painted area
+// at the same size: apple 0.66, blueberry 0.56, pear 0.55, ladybird/frog 0.54, bird 0.46,
+// duck 0.43, banana 0.45 (was 0.20 before it was redrawn). These bring them all to ~0.54-0.60.
+const CARGO_SCALE = { apple: 0.95, duck: 1.13, banana: 1.1, bird: 1.1 };
+
 function drawCargo(ctx, kind, x, y, size, color, line, opts = {}) {
   const { lift = 1, wobble = 0, alpha = 1 } = opts;
+  size *= CARGO_SCALE[kind || "apple"] || 1;
   const col = paint(color);
   ctx.save();
   ctx.globalAlpha = alpha;
@@ -1280,21 +1344,34 @@ function drawBlueberry(ctx, size, col, line) {
 }
 
 function drawBanana(ctx, size, col, line) {
+  // A chunky, smiling crescent (0.12.9). The old one was a thin sliver about a third of the
+  // painted area of the other cargo, so it looked tiny on the stump and in the wagon.
   ctx.beginPath();
-  ctx.moveTo(-size * 0.38, -size * 0.08);
-  ctx.quadraticCurveTo(-size * 0.1, size * 0.42, size * 0.4, size * 0.16);
-  ctx.quadraticCurveTo(size * 0.48, size * 0.08, size * 0.36, 0);
-  ctx.quadraticCurveTo(-size * 0.02, size * 0.2, -size * 0.28, -size * 0.16);
+  ctx.moveTo(-size * 0.4, -size * 0.3);
+  ctx.bezierCurveTo(-size * 0.5, size * 0.12, -size * 0.18, size * 0.44, size * 0.16, size * 0.4);
+  ctx.bezierCurveTo(size * 0.36, size * 0.38, size * 0.5, size * 0.22, size * 0.52, size * 0.02);
+  ctx.quadraticCurveTo(size * 0.5, -size * 0.06, size * 0.42, -size * 0.04);
+  ctx.bezierCurveTo(size * 0.3, size * 0.06, size * 0.08, size * 0.1, -size * 0.05, -size * 0.0);
+  ctx.bezierCurveTo(-size * 0.13, -size * 0.08, -size * 0.16, -size * 0.2, -size * 0.17, -size * 0.32);
+  ctx.quadraticCurveTo(-size * 0.28, -size * 0.42, -size * 0.4, -size * 0.3);
   ctx.closePath();
   ctx.fillStyle = col.base;
   ctx.fill();
   fillStroke(ctx, null, line);
+  // Stalk at the top end, little brown tip at the other.
   ctx.fillStyle = "#7a4a18";
   ctx.beginPath();
-  ctx.ellipse(-size * 0.34, -size * 0.12, size * 0.07, size * 0.05, -0.6, 0, Math.PI * 2);
+  ctx.ellipse(-size * 0.29, -size * 0.4, size * 0.07, size * 0.1, -0.2, 0, Math.PI * 2);
   ctx.fill();
-  glossOval(ctx, -size * 0.04, size * 0.04, size * 0.12, size * 0.07);
-  drawFace(ctx, size * 0.02, size * 0.1, size * 0.42, "idle", 1);
+  ctx.strokeStyle = INK;
+  ctx.lineWidth = Math.max(1.5, line * 0.55);
+  ctx.stroke();
+  ctx.fillStyle = "#7a4a18";
+  ctx.beginPath();
+  ctx.arc(size * 0.48, -size * 0.02, size * 0.035, 0, Math.PI * 2);
+  ctx.fill();
+  glossOval(ctx, -size * 0.3, -size * 0.06, size * 0.06, size * 0.12);
+  drawFace(ctx, size * 0.02, size * 0.2, size * 0.5, "idle", 1);
 }
 
 
