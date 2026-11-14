@@ -100,7 +100,7 @@ export function startHost() {
       game.bgKey = "";
     }
     resize();
-    const dt = Math.min(0.05, (now - last) / 1000 || 0.016);
+    const dt = Math.min(0.25, Math.max(0, (now - last) / 1000 || 0.016));
     last = now;
     const w = stage.__w;
     const h = stage.__h;
@@ -126,6 +126,7 @@ export function startHost() {
     const times = (window.__c12times ||= []);
     times.push(work);
     if (times.length > 1200) times.shift();
+    window.__c12game = game;
     window.__c12 = {
       kind: game.kind,
       metrics: game.metrics || null,

@@ -1,0 +1,38 @@
+diff --git a/c12/pots.js b/c12/pots.js
+index 25e367c..7d8f3ed 100644
+--- a/c12/pots.js
++++ b/c12/pots.js
+@@ -618,12 +618,16 @@ function butterfly(ctx, x, y, s, flap, color, line) {
+ function butterflySpot(i, w, h, time, calm, view) {
+   const speed = calm ? 0.4 : 0.85;
+   const t = time * speed + i * 2.3;
+-  const top = Math.max(h * 0.18, 108);
++  const onLeft = i % 2 === 0 && i !== 2;
++  const u = view?.u || Math.min(w / 844, h / 390);
++  // shooting-stars-3 polish: right-hand butterflies fly below the sun's glow (sun at 0.8w, 0.14h,
++  // glow radius 78u) so a pale wing never washes out against it.
++  const sunClear = h * 0.14 + 78 * u + 22 * u * 0.8 + 6 * u;
++  const top = onLeft ? Math.max(h * 0.18, 108) : Math.max(h * 0.18, 108, sunClear);
+   const low = Math.max(top + 28, (view?.playTop || h * 0.45) - 18);
+   const spanY = low - top;
+   const leftBand = Math.max(36, (view?.playLeft || 140) - 36);
+   const right = (view?.playRight || w * 0.7) + 28;
+-  const onLeft = i % 2 === 0 && i !== 2;
+   const x = onLeft
+     ? 28 + (Math.sin(t) * 0.5 + 0.5) * Math.max(20, leftBand - 36)
+     : right + (Math.sin(t * 0.9) * 0.5 + 0.5) * Math.max(24, w - 24 - right);
+@@ -666,8 +670,12 @@ export function drawPots(game, bg, fg, w, h, calm) {
+   for (let i = 0; i < bugs; i++) {
+     const b = butterflySpot(i, w, h, game.time, calm, v);
+     if (b.x > v.playLeft - 12 && b.x < v.playRight + 12 && b.y > v.playTop - 8) continue;
+-    const pipR = v.pip * 0.7;
+-    if (Math.abs(b.x - v.pipX) < pipR && Math.abs(b.y - (v.pipY - pipR)) < pipR) continue;
++    // shooting-stars-3 polish: a wider keep-clear box around Pip (body, head and tuft) plus the
++    // butterfly's own half-span, so a fly-by stays well off him.
++    const bugHalf = 22 * u * 0.8;
++    const clearX = v.pip * 0.75 + bugHalf + 14 * u;
++    const clearTop = v.pipY - v.pip * 1.75 - bugHalf - 14 * u;
++    if (Math.abs(b.x - v.pipX) < clearX && b.y > clearTop) continue;
+     butterfly(ctx, b.x, b.y, 22 * u, b.flap, colors[i % colors.length], line);
+   }
+   drawPip(ctx, v.pipX, v.pipY, v.pip, "idle", game.time, calm);
