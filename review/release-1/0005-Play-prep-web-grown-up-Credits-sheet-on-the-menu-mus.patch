@@ -1,0 +1,457 @@
+From 9fa916fd69ef303bf93bde5f9fb8054447cbce16 Mon Sep 17 00:00:00 2001
+From: box <b@x>
+Date: Mon, 16 Nov 2026 01:31:30 +0000
+Subject: [PATCH 5/5] Play prep (web): grown-up Credits sheet on the menu
+ (music credits, version 1.0.0, open-source licences from a generated
+ THIRD_PARTY_NOTICES.txt); padlock grown-up icon on the menu; a second tile
+ tap during the zoom-in is ignored; picture-only 'please update' screen on
+ WebViews older than Chrome 111; CREDITS.txt updated
+
+---
+ public/CREDITS.txt  | 17 ++++-------
+ spa.html            | 35 +++++++++++++++++++++++
+ src/game/credits.ts | 22 +++++++-------
+ src/game/ui.tsx     | 70 +++++++++++++++++++++++++++++++++++++++++----
+ src/spa-main.tsx    |  5 +++-
+ src/styles.css      | 35 +++++++++++++++++++++++
+ vite.apk.config.ts  |  3 +-
+ vite.notices.ts     | 67 +++++++++++++++++++++++++++++++++++++++++++
+ vite.spa.config.ts  |  3 +-
+ 9 files changed, 227 insertions(+), 30 deletions(-)
+ create mode 100644 vite.notices.ts
+
+diff --git a/public/CREDITS.txt b/public/CREDITS.txt
+index e7eb22a..87043dd 100644
+--- a/public/CREDITS.txt
++++ b/public/CREDITS.txt
+@@ -17,15 +17,6 @@ Colour sorting (levels and endless) music:
+ Licensed under Creative Commons: By Attribution 4.0 License
+ http://creativecommons.org/licenses/by/4.0/
+ 
+-Shape Box music:
+-"Wholesome" Kevin MacLeod (incompetech.com)
+-Licensed under Creative Commons: By Attribution 4.0 License
+-http://creativecommons.org/licenses/by/4.0/
+-
+-Fish Nets music:
+-"Aquaria" by cynicmusic, OpenGameArt (https://opengameart.org/content/aquaria)
+-CC0 (public domain dedication). Credit optional.
+-
+ Shooting stars music:
+ Träumerei (Schumann) — performed by Donald Betts; recording from Musopen (public domain).
+ Source: https://commons.wikimedia.org/wiki/File:Robert_Schumann_-_scenes_from_childhood,_op._15_-_vii._dreaming.ogg
+@@ -33,10 +24,14 @@ Musopen: https://musopen.org/music/2326-kinderszenen-scenes-from-childhood-op-15
+ 
+ Changes: each track was cut to a seamless loop (the Kevin MacLeod tracks with a
+ 1.5 s equal-power crossfade at a bar-aligned point), loudness-matched and
+-re-encoded as Ogg Vorbis and AAC. "Daily Beetle" was cut to a 40-bar loop
++re-encoded as Ogg Vorbis. "Daily Beetle" was cut to a 40-bar loop
+ (57.05 s to 153.64 s of the original) with the same 1.5 s crossfade.
+ "dailybeetle-intro" is the first 12 s of that same loop, so the menu music can
+ start at once while the full loop loads.
+ "Träumerei" was trimmed of its leading and trailing silence (0.45 s to 197.6 s of the
+ recording), looped with a 1.5 s equal-power crossfade (it is not a seamless loop),
+-loudness-matched to -20 LUFS and re-encoded as Ogg Vorbis and AAC.
++loudness-matched to -20 LUFS and re-encoded as Ogg Vorbis.
++
++Piano and Colouring: sounds and music made in the app.
++
++Open-source software notices: see THIRD_PARTY_NOTICES.txt.
+diff --git a/spa.html b/spa.html
+index 8f4125d..b9da708 100644
+--- a/spa.html
++++ b/spa.html
+@@ -11,6 +11,41 @@
+   </head>
+   <body>
+     <div id="root"></div>
++    <!--
++      release-1: old-WebView check (plain ES5, runs before the app). The build targets Chrome / WebView 111+
++      and Safari 16.4+. On anything older, show a picture-only "please update" screen (no words for
++      children): a phone with a circling update arrow. The app module then does not start.
++    -->
++    <div id="old-webview" hidden aria-label="Please update Android System WebView or Chrome" role="img">
++      <svg viewBox="0 0 200 200" width="60%" height="60%">
++        <circle cx="100" cy="100" r="92" fill="#fff7e6" stroke="#2e4168" stroke-width="8" />
++        <rect x="70" y="40" width="60" height="112" rx="12" fill="#8fd4f8" stroke="#2e4168" stroke-width="8" />
++        <circle cx="100" cy="136" r="5" fill="#2e4168" />
++        <path d="M84 86a18 18 0 1 0 6-14" fill="none" stroke="#2e4168" stroke-width="8" stroke-linecap="round" />
++        <path d="M82 60l9 13-15 3z" fill="#2e4168" stroke="#2e4168" stroke-width="4" stroke-linejoin="round" />
++      </svg>
++    </div>
++    <script>
++      (function () {
++        var ua = navigator.userAgent || "";
++        var old = false;
++        var c = ua.match(/Chrom(?:e|ium)\/(\d+)/);
++        if (c && +c[1] < 111) old = true;
++        var s = !c && /Safari\//.test(ua) && ua.match(/Version\/(\d+)\.(\d+)/);
++        if (s && (+s[1] < 16 || (+s[1] === 16 && +s[2] < 4))) old = true;
++        try {
++          if (typeof structuredClone !== "function" || !Array.prototype.at || !(window.CSS && CSS.supports && CSS.supports("color", "oklch(0 0 0)"))) old = true;
++        } catch (e) {
++          old = true;
++        }
++        if (old) {
++          window.__pipOldWebView = true;
++          var el = document.getElementById("old-webview");
++          el.hidden = false;
++          el.style.cssText = "position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:#8fd4f8";
++        }
++      })();
++    </script>
+     <script type="module" src="/src/spa-main.tsx"></script>
+   </body>
+ </html>
+diff --git a/src/game/credits.ts b/src/game/credits.ts
+index 18fb070..f7f44df 100644
+--- a/src/game/credits.ts
++++ b/src/game/credits.ts
+@@ -1,4 +1,10 @@
+-/** Music credits (source list for public/CREDITS.txt and release notes; not shown in the child UI). */
++/** App version, shown on the grown-up credits sheet (matches Android versionName). */
++export const APP_VERSION = "1.0.0";
++
++/**
++ * Music credits: shown on the grown-up credits sheet (behind the 3 s hold, so text is fine there)
++ * and the source list for public/CREDITS.txt and the release notes.
++ */
+ export const MUSIC_CREDITS: { game: string; lines: string[] }[] = [
+   {
+     game: "Menu",
+@@ -24,14 +30,10 @@ export const MUSIC_CREDITS: { game: string; lines: string[] }[] = [
+       "http://creativecommons.org/licenses/by/4.0/",
+     ],
+   },
+-  {
+-    game: "Shape Box",
+-    lines: [
+-      "\u201CWholesome\u201D Kevin MacLeod (incompetech.com)",
+-      "Licensed under Creative Commons: By Attribution 4.0 License",
+-      "http://creativecommons.org/licenses/by/4.0/",
+-    ],
+-  },
+-  { game: "Fish Nets", lines: ["\u201CAquaria\u201D by cynicmusic, OpenGameArt. CC0."] },
+   { game: "Shooting stars", lines: ["Tr\u00E4umerei (Schumann) \u2014 performed by Donald Betts; recording from Musopen (public domain)."] },
++  { game: "Piano and Colouring", lines: ["Sounds and music made in the app."] },
+ ];
++
++/** Changes made to the tracks (CC BY 4.0 asks for changes to be indicated). */
++export const MUSIC_CHANGES =
++  "Each track was cut to a loop (with a short crossfade), loudness-matched and re-encoded as Ogg Vorbis.";
+diff --git a/src/game/ui.tsx b/src/game/ui.tsx
+index a0d30b2..1092742 100644
+--- a/src/game/ui.tsx
++++ b/src/game/ui.tsx
+@@ -1,5 +1,5 @@
+-import { useCallback, useEffect, useRef, useState, type MouseEvent, type PointerEvent, type ReactNode } from "react";
+-import { Check, House, Moon, Music, SunMedium, Volume2, VolumeX } from "lucide-react";
++import { useEffect, useRef, useState, type MouseEvent, type PointerEvent, type ReactNode } from "react";
++import { Check, House, LockKeyhole, Moon, Music, ScrollText, SunMedium, Volume2, VolumeX } from "lucide-react";
+ import { audio, type MenuTap, type TrackId } from "./audio";
+ import { MODE_TRACK, TRAIN_COLOUR_COUNTS, sim, useSim } from "./sim";
+ import { colorsForCount, type ColorCount } from "./theme";
+@@ -16,6 +16,7 @@ import { PIANO_VOICES } from "./piano/pianoSynth";
+ import { paintBalloonsCard, paintPotsCard } from "./menu/menuArt";
+ import { StarCatcher } from "./stars/StarCatcher";
+ import { paintStarsCard } from "./stars/starArt";
++import { APP_VERSION, MUSIC_CHANGES, MUSIC_CREDITS } from "./credits";
+ 
+ const TAP_TRACK: Partial<Record<MenuTap, TrackId>> = {
+   pots: MODE_TRACK.levels,
+@@ -28,6 +29,9 @@ function releasePress(el: HTMLButtonElement) {
+   el.closest(".home-card")?.classList.remove("is-down");
+ }
+ 
++/** release-1: one game start per menu visit (a second tile tap during the zoom-in is ignored). */
++let menuStarting = 0;
++
+ function tapProps(kind: MenuTap, start: () => void) {
+   return {
+     onPointerDown: (e: PointerEvent<HTMLButtonElement>) => {
+@@ -50,6 +54,12 @@ function tapProps(kind: MenuTap, start: () => void) {
+         audio.menuTap(kind);
+       }
+       delete e.currentTarget.dataset.tapped;
++      const now = performance.now();
++      if (now - menuStarting < TRANSITION.menuToGameMs + 600) {
++        releasePress(e.currentTarget);
++        return;
++      }
++      menuStarting = now;
+       const card = e.currentTarget.closest(".home-card");
+       card?.classList.add("is-zoom");
+       releasePress(e.currentTarget);
+@@ -60,7 +70,7 @@ function tapProps(kind: MenuTap, start: () => void) {
+ 
+ const HOLD_MS = HOME_BUTTON.holdMs;
+ 
+-function GrownUpCorner() {
++function GrownUpCorner({ where = "play" }: { where?: "menu" | "play" }) {
+   useSim();
+   const [hold, setHold] = useState(0);
+   const btnRef = useRef<HTMLButtonElement>(null);
+@@ -112,7 +122,8 @@ function GrownUpCorner() {
+       onPointerCancel={cancel}
+     >
+       <span className="grown-glyph" aria-hidden="true">
+-        <House size={26} strokeWidth={2.4} />
++        {/* release-1: on the menu a padlock (grown-ups only); in a game the house (home). */}
++        {where === "menu" ? <LockKeyhole size={26} strokeWidth={2.4} /> : <House size={26} strokeWidth={2.4} />}
+         <svg className="grown-ring" viewBox="0 0 56 56">
+           <circle
+             cx="28"
+@@ -143,8 +154,47 @@ function DotCluster({ count, on }: { count: number; on: boolean }) {
+   );
+ }
+ 
++/**
++ * release-1: the grown-up credits sheet (menu only, behind the 3 s hold, so it may use text):
++ * music credits, the app version and the open-source notices, read from the bundled file (no web).
++ */
++function CreditsSheet() {
++  const [notices, setNotices] = useState<string | null>(null);
++  const showNotices = () => {
++    if (notices !== null) return;
++    setNotices("\u2026");
++    fetch(`${import.meta.env.BASE_URL}THIRD_PARTY_NOTICES.txt`)
++      .then((r) => (r.ok ? r.text() : Promise.reject(new Error(String(r.status)))))
++      .then(setNotices, () => setNotices("The notices file could not be read."));
++  };
++  return (
++    <div className="grown-credits" role="document" aria-label="Credits">
++      <h2>Pip&rsquo;s Pots {APP_VERSION}</h2>
++      <h3>Music</h3>
++      {MUSIC_CREDITS.map((c) => (
++        <p key={c.game}>
++          <b>{c.game}</b>
++          {c.lines.map((line) => (
++            <span key={line}>{line}</span>
++          ))}
++        </p>
++      ))}
++      <p className="grown-credits-note">{MUSIC_CHANGES}</p>
++      <h3>Open-source software</h3>
++      {notices === null ? (
++        <button type="button" className="grown-credits-more" onClick={showNotices}>
++          Show the open-source licences
++        </button>
++      ) : (
++        <pre>{notices}</pre>
++      )}
++    </div>
++  );
++}
++
+ function GrownUpPanel() {
+   useSim();
++  const [credits, setCredits] = useState(false);
+   const SoundIcon = sim.sound ? Volume2 : VolumeX;
+   const onMenu = sim.phase === "menu";
+   const mode = onMenu ? null : sim.mode;
+@@ -232,11 +282,16 @@ function GrownUpPanel() {
+           <button type="button" className={opt(sim.calm)} aria-pressed={sim.calm} aria-label={sim.calm ? "Calm on" : "Calm off"} onClick={() => sim.toggleCalm()}>
+             {sim.calm ? <Moon size={34} strokeWidth={2.4} /> : <SunMedium size={34} strokeWidth={2.4} />}
+           </button>
++          {onMenu && (
++            <button type="button" className={opt(credits)} aria-pressed={credits} aria-label="Credits" onClick={() => setCredits((v) => !v)}>
++              <ScrollText size={34} strokeWidth={2.4} />
++            </button>
++          )}
+           <button type="button" className="grown-btn grown-close" aria-label="Close" onClick={() => sim.closeGrownUp()}>
+             <Check size={36} strokeWidth={2.8} />
+           </button>
+         </div>
+-        {game}
++        {onMenu && credits ? <CreditsSheet /> : game}
+       </div>
+     </div>
+   );
+@@ -283,9 +338,12 @@ function useIdleTrackPrefetch() {
+ export function Menu() {
+   useSim();
+   useIdleTrackPrefetch();
++  useEffect(() => {
++    menuStarting = 0;
++  }, []);
+   return (
+     <>
+-      <GrownUpCorner />
++      <GrownUpCorner where="menu" />
+       {sim.grownUp && (
+         <UiBoundary label="grown-up panel" onError={() => sim.closeGrownUp()}>
+           <GrownUpPanel />
+diff --git a/src/spa-main.tsx b/src/spa-main.tsx
+index 5abbe88..2fa94c4 100644
+--- a/src/spa-main.tsx
++++ b/src/spa-main.tsx
+@@ -2,4 +2,7 @@ import "./styles.css";
+ import { createRoot } from "react-dom/client";
+ import GameApp from "@/game/GameApp";
+ 
+-createRoot(document.getElementById("root")!).render(<GameApp />);
++// release-1: spa.html shows a picture-only "please update" screen on a too-old WebView; stay out of its way.
++if (!(window as unknown as { __pipOldWebView?: boolean }).__pipOldWebView) {
++  createRoot(document.getElementById("root")!).render(<GameApp />);
++}
+diff --git a/src/styles.css b/src/styles.css
+index 3f1ed63..61d454c 100644
+--- a/src/styles.css
++++ b/src/styles.css
+@@ -2171,3 +2171,38 @@
+   from { --colour-hold: 0; }
+   to { --colour-hold: 100; }
+ }
++
++/* release-1: grown-up credits sheet (menu only; text is fine behind the 3 s hold). */
++.house-panel .grown-credits {
++  max-height: min(56vh, 420px);
++  overflow-y: auto;
++  overscroll-behavior: contain;
++  margin-top: 12px;
++  padding: 12px 14px;
++  border-top: 3px dashed rgb(46 65 104 / 25%);
++  color: var(--house-ink, #2e4168);
++  font: 500 14px/1.4 system-ui, sans-serif;
++  text-align: left;
++  user-select: text;
++  -webkit-user-select: text;
++}
++.house-panel .grown-credits h2 { margin: 0 0 6px; font-size: 17px; font-weight: 800; }
++.house-panel .grown-credits h3 { margin: 12px 0 4px; font-size: 15px; font-weight: 800; }
++.house-panel .grown-credits p { margin: 0 0 8px; }
++.house-panel .grown-credits p span { display: block; overflow-wrap: anywhere; }
++.house-panel .grown-credits-note { opacity: 0.8; font-size: 13px; }
++.house-panel .grown-credits pre {
++  margin: 0;
++  white-space: pre-wrap;
++  overflow-wrap: anywhere;
++  font: 11px/1.35 ui-monospace, monospace;
++}
++.house-panel .grown-credits-more {
++  min-height: 48px;
++  padding: 8px 14px;
++  border: 3px solid var(--house-ink, #2e4168);
++  border-radius: 12px;
++  background: #fff7e6;
++  color: inherit;
++  font: 700 14px system-ui, sans-serif;
++}
+diff --git a/vite.apk.config.ts b/vite.apk.config.ts
+index 2e5fb9a..1297fd1 100644
+--- a/vite.apk.config.ts
++++ b/vite.apk.config.ts
+@@ -3,6 +3,7 @@ import { fileURLToPath } from "node:url";
+ import { defineConfig } from "vite";
+ import viteReact from "@vitejs/plugin-react";
+ import tailwindcss from "@tailwindcss/vite";
++import { thirdPartyNotices } from "./vite.notices";
+ 
+ /** The WebView can open index.html. The source entry stays spa.html so it cannot replace the Vite dev index. */
+ function copySpaToIndex(outDir: string) {
+@@ -22,7 +23,7 @@ export default defineConfig({
+   resolve: {
+     alias: { "@": fileURLToPath(new URL("./src", import.meta.url)) },
+   },
+-  plugins: [tailwindcss(), viteReact(), copySpaToIndex("dist-apk")],
++  plugins: [tailwindcss(), viteReact(), thirdPartyNotices(), copySpaToIndex("dist-apk")],
+   build: {
+     outDir: "dist-apk",
+     rollupOptions: { input: fileURLToPath(new URL("./spa.html", import.meta.url)) },
+diff --git a/vite.notices.ts b/vite.notices.ts
+new file mode 100644
+index 0000000..c68799b
+--- /dev/null
++++ b/vite.notices.ts
+@@ -0,0 +1,67 @@
++import { existsSync, readdirSync, readFileSync } from "node:fs";
++import { dirname, join } from "node:path";
++
++/**
++ * release-1: writes THIRD_PARTY_NOTICES.txt next to the build, with the licence text of every
++ * npm package that ends up in the bundle (found from the modules rendered into the bundle). The grown-up
++ * panel's credits sheet links to it.
++ */
++export function thirdPartyNotices() {
++  return {
++    name: "third-party-notices",
++    apply: "build" as const,
++    generateBundle(
++      this: { emitFile(f: { type: "asset"; fileName: string; source: string }): void },
++      _options: unknown,
++      bundle: Record<string, { type: string; modules?: Record<string, { renderedLength: number }> }>,
++    ) {
++      const roots = new Map<string, string>();
++      // Only modules whose code is actually in the output (tree-shaken ones are left out).
++      const ids: string[] = [];
++      for (const out of Object.values(bundle)) {
++        if (out.type !== "chunk" || !out.modules) continue;
++        for (const [id, m] of Object.entries(out.modules)) if (m.renderedLength > 0) ids.push(id);
++      }
++      for (const id of ids) {
++        const clean = id.replace(/^\0/, "").split("?")[0]!;
++        const m = clean.match(/^(.*\/node_modules\/)((?:@[^/]+\/)?[^/]+)\//);
++        if (!m) continue;
++        roots.set(m[2]!, m[1]! + m[2]!);
++      }
++      const names = [...roots.keys()].sort();
++      const parts: string[] = [
++        "Pip's Pots - open-source notices",
++        "================================",
++        "",
++        "Pip's Pots is built with the open-source packages below. Each is used under its own licence,",
++        "reproduced in full here.",
++        "",
++        "Packages: " + names.length,
++        "",
++      ];
++      for (const name of names) {
++        const dir = roots.get(name)!;
++        let version = "";
++        let licence = "see below";
++        try {
++          const pkg = JSON.parse(readFileSync(join(dir, "package.json"), "utf8"));
++          version = pkg.version ?? "";
++          licence = typeof pkg.license === "string" ? pkg.license : pkg.license?.type ?? licence;
++        } catch {
++          /* no package.json */
++        }
++        let text = "";
++        for (const d of [dir, dirname(dir)]) {
++          if (!existsSync(d)) continue;
++          const f = readdirSync(d).find((x) => /^(licen[cs]e|copying)(\.(md|txt))?$/i.test(x));
++          if (f) {
++            text = readFileSync(join(d, f), "utf8").trim();
++            break;
++          }
++        }
++        parts.push("-".repeat(78), `${name}${version ? " " + version : ""}  (${licence})`, "-".repeat(78), "", text || `Licensed under ${licence}.`, "");
++      }
++      this.emitFile({ type: "asset", fileName: "THIRD_PARTY_NOTICES.txt", source: parts.join("\n") });
++    },
++  };
++}
+diff --git a/vite.spa.config.ts b/vite.spa.config.ts
+index 2bba3e9..d6ceb7c 100644
+--- a/vite.spa.config.ts
++++ b/vite.spa.config.ts
+@@ -3,6 +3,7 @@ import { fileURLToPath } from "node:url";
+ import { defineConfig } from "vite";
+ import viteReact from "@vitejs/plugin-react";
+ import tailwindcss from "@tailwindcss/vite";
++import { thirdPartyNotices } from "./vite.notices";
+ 
+ /** GitHub Pages serves index.html. The source entry stays spa.html so it cannot replace the Vite dev index. */
+ function copySpaToIndex(outDir: string) {
+@@ -22,7 +23,7 @@ export default defineConfig({
+   resolve: {
+     alias: { "@": fileURLToPath(new URL("./src", import.meta.url)) },
+   },
+-  plugins: [tailwindcss(), viteReact(), copySpaToIndex("dist-static")],
++  plugins: [tailwindcss(), viteReact(), thirdPartyNotices(), copySpaToIndex("dist-static")],
+   build: {
+     outDir: "dist-static",
+     rollupOptions: { input: fileURLToPath(new URL("./spa.html", import.meta.url)) },
+-- 
+2.47.3
+

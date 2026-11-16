@@ -1,0 +1,2061 @@
+From f875914cc32cf48d61c5f0e61d1228dce1872f6f Mon Sep 17 00:00:00 2001
+From: box <b@x>
+Date: Mon, 16 Nov 2026 01:31:30 +0000
+Subject: [PATCH 2/5] Bugs and polish: Colouring Pip stands on a shelf, bunting
+ clear of the home button, crayons inside the edge; home button breathing room
+ beside a cut-out; balloons stay out of the cut-out (spawn and exit at the
+ safe-area edge); piano wall notes never hidden behind the piano; 208 dead CSS
+ rules pruned
+
+---
+ src/game/balloons/runtime.ts         |   64 +-
+ src/game/colouring/ColouringPlay.tsx |   22 +-
+ src/game/colouring/colourArt.ts      |  100 +-
+ src/game/piano/pianoArt.ts           |   36 +-
+ src/styles.css                       | 1460 +-------------------------
+ 5 files changed, 221 insertions(+), 1461 deletions(-)
+
+diff --git a/src/game/balloons/runtime.ts b/src/game/balloons/runtime.ts
+index 3d1a582..fe25eef 100644
+--- a/src/game/balloons/runtime.ts
++++ b/src/game/balloons/runtime.ts
+@@ -321,11 +321,6 @@ export function makeBalloonDrops(): BalloonDrop[] {
+   }));
+ }
+ 
+-function targetCount(sim: BalloonSim) {
+-  if (sim.balloonScene === SKY_INDEX) return COUNT_SKY;
+-  return SCENES[sim.balloonScene]?.vehicle === "sub" ? COUNT_SEA : COUNT_PLAY;
+-}
+-
+ /** Wanted balloons with their centre on screen (plus the ones on their way in). */
+ export const ONSCREEN_PLAY = 8;
+ export const ONSCREEN_SEA = 7;
+@@ -693,24 +688,57 @@ function baseFlowSpeed(sim: BalloonSim) {
+   return Math.min(Math.hypot(flowA.ux, flowA.uy), Math.hypot(flowB.ux, flowB.uy));
+ }
+ 
+-/** Spawn point candidate in screen px. */
++/**
++ * release-1: the display cut-out (safe-area insets, CSS px). Balloons are not born in it, and a
++ * balloon drifting out to the left or top fades away at the cut-out's edge rather than floating,
++ * untappable, through it. Read from a hidden probe element, cached for a second.
++ */
++let insetProbe: HTMLDivElement | null = null;
++let insetCache = { at: -1e9, top: 0, right: 0, bottom: 0, left: 0 };
++export function safeInsetsPx() {
++  if (typeof document === "undefined") return insetCache;
++  const now = performance.now();
++  if (now - insetCache.at < 1000) return insetCache;
++  if (!insetProbe || !insetProbe.isConnected) {
++    insetProbe = document.createElement("div");
++    insetProbe.setAttribute("aria-hidden", "true");
++    insetProbe.style.cssText =
++      "position:fixed;inset:0;pointer-events:none;visibility:hidden;padding:env(safe-area-inset-top,0px) env(safe-area-inset-right,0px) env(safe-area-inset-bottom,0px) env(safe-area-inset-left,0px)";
++    document.body.append(insetProbe);
++  }
++  const cs = getComputedStyle(insetProbe);
++  insetCache = {
++    at: now,
++    top: parseFloat(cs.paddingTop) || 0,
++    right: parseFloat(cs.paddingRight) || 0,
++    bottom: parseFloat(cs.paddingBottom) || 0,
++    left: parseFloat(cs.paddingLeft) || 0,
++  };
++  return insetCache;
++}
++
+ export type SpawnMode = "edge" | "open" | "seed";
+ 
++/** Spawn point candidate in screen px. */
+ function candidate(sim: BalloonSim, rpx: number, mode: SpawnMode): Vec {
+-  const W = sim.screenW;
++  // Spawn inside the safe area: x0..x1 is the width left and right of any display cut-out.
++  const ins = safeInsetsPx();
++  const x0 = ins.left;
++  const x1 = sim.screenW - ins.right;
++  const W = x1 - x0;
+   const H = sim.screenH;
+   // Scene-change pre-seed: lower two thirds, right half, fully on screen.
+   if (mode === "seed") {
+     // The sky has no sideways drift, so its seeds may use the whole width.
+-    const x0 = scrolling(sim) ? W * 0.5 : rpx * 1.1;
+-    return { x: x0 + sim.rng() * (W - rpx * 1.1 - x0), y: H / 3 + sim.rng() * (H * (2 / 3) - rpx * 1.1) };
++    const from = scrolling(sim) ? W * 0.5 : rpx * 1.1;
++    return { x: x0 + from + sim.rng() * (W - rpx * 1.1 - from), y: H / 3 + sim.rng() * (H * (2 / 3) - rpx * 1.1) };
+   }
+-  if (mode === "open") return { x: rpx * 1.05 + sim.rng() * (W - rpx * 2.1), y: rpx * 1.05 + sim.rng() * (H - rpx * 2.1) };
++  if (mode === "open") return { x: x0 + rpx * 1.05 + sim.rng() * (W - rpx * 2.1), y: rpx * 1.05 + sim.rng() * (H - rpx * 2.1) };
+   // Enter close to the edge and ease in, so few balloons wait mostly off screen.
+-  if (!scrolling(sim)) return { x: rpx * 1.1 + sim.rng() * (W - rpx * 2.2), y: H + rpx * EDGE_IN };
++  if (!scrolling(sim)) return { x: x0 + rpx * 1.1 + sim.rng() * (W - rpx * 2.2), y: H + rpx * EDGE_IN };
+   // Flux-weighted inflow: the right edge carries most of the up-left flow.
+-  if (sim.rng() < RIGHT_SHARE) return { x: W + rpx * EDGE_IN, y: H * (RIGHT_FROM + sim.rng() * (RIGHT_TO - RIGHT_FROM)) };
+-  return { x: W * BOTTOM_FROM + sim.rng() * (W * (1 - BOTTOM_FROM) + rpx), y: H + rpx * EDGE_IN };
++  if (sim.rng() < RIGHT_SHARE) return { x: x1 + rpx * EDGE_IN, y: H * (RIGHT_FROM + sim.rng() * (RIGHT_TO - RIGHT_FROM)) };
++  return { x: x0 + W * BOTTOM_FROM + sim.rng() * (W * (1 - BOTTOM_FROM) + rpx), y: H + rpx * EDGE_IN };
+ }
+ /** Edge spawn: centre this many radii beyond the edge (a sliver shows; it eases in). */
+ export const EDGE_IN = 0.55;
+@@ -1354,10 +1382,14 @@ export function stepBalloonsRuntime(sim: BalloonSim, dt: number) {
+     // Leaving over the top or left edge: once the centre is past the edge, ease out
+     // over the next half radius and finish there (few balloons linger mostly off screen).
+     const half = balloon.body * 0.5 * EXIT_FADE_R;
+-    const out = Math.max((balloon.y - h / 2) / half, (-w / 2 - balloon.x) / half);
++    // The left and top edges are the safe-area edges (a cut-out there counts as off screen).
++    const ins = safeInsetsPx();
++    const edgeL = -w / 2 + (ins.left / Math.max(1, sim.screenW)) * w;
++    const edgeT = h / 2 - (ins.top / Math.max(1, sim.screenH)) * h;
++    const out = Math.max((balloon.y - edgeT) / half, (edgeL - balloon.x) / half);
+     balloon.leave = Math.max(0, Math.min(1, out));
+-    const exitTop = h / 2 + half;
+-    const exitLeft = -w / 2 - half;
++    const exitTop = edgeT + half;
++    const exitLeft = edgeL - half;
+     if (balloon.y > exitTop || balloon.x < exitLeft || balloon.x > w / 2 + balloon.body * 3 || balloon.y < -h / 2 - balloon.body * 3) {
+       balloon.phase = "gone";
+       dirty = true;
+diff --git a/src/game/colouring/ColouringPlay.tsx b/src/game/colouring/ColouringPlay.tsx
+index 09e26be..859557c 100644
+--- a/src/game/colouring/ColouringPlay.tsx
++++ b/src/game/colouring/ColouringPlay.tsx
+@@ -6,7 +6,7 @@ import { HouseCanvas } from "../house/HouseCanvas";
+ import { burstSparkles, starShower } from "../house/fx";
+ import { paintHousePip } from "../house/pip";
+ import { ColourBoard, type BoardSnap, type Tool } from "./board";
+-import { paintColourScene, paintCrayon, paintNextButton, paintToolIcon } from "./colourArt";
++import { paintColourScene, paintCrayon, paintNextButton, paintShelf, paintToolIcon } from "./colourArt";
+ import { CRAYONS, PICTURES, type CrayonId } from "./pictures";
+ 
+ /**
+@@ -44,9 +44,14 @@ const TOOL_ART = Object.fromEntries(TOOLS.map((t) => [t, Object.fromEntries(CRAY
+ >;
+ const NEXT_ART = PICTURES.map(paintNextButton);
+ 
++/**
++ * release-1: Pip stands on a little wall shelf (colourArt paintShelf) instead of floating. The
++ * whole Pip fits the canvas, wing tips and feet included (head r: 1.54 r either side, 2.27 r below
++ * the head centre to the feet, 1.35 r above it to the crest), so he is never cut off.
++ */
+ const pipPaint = (cheer: number) => (ctx: CanvasRenderingContext2D, w: number, h: number) => {
+-  const r = Math.min(w / 2.7, h / 3.25);
+-  paintHousePip(ctx, w / 2, r * 1.15, r, w, { cheer });
++  const r = Math.min(w / 3.3, h / 3.7);
++  paintHousePip(ctx, w / 2, h - r * 2.3, r, w, { cheer });
+ };
+ const PIP_CALM = pipPaint(0);
+ const PIP_CHEER = pipPaint(1);
+@@ -339,10 +344,13 @@ function ColouringPlayInner({ help, auto }: { help: boolean; auto: boolean }) {
+     <div className="colour-stage" ref={stageRef} data-tool={tool}>
+       <HouseCanvas className="colour-scene" paint={paintColourScene} />
+       <div className="colour-side">
+-        <div className="colour-pip-bob" aria-hidden="true">
+-          <div className="colour-pip" ref={pipRef}>
+-            <HouseCanvas className="colour-pip-art calm" paint={PIP_CALM} />
+-            <HouseCanvas className="colour-pip-art cheer" paint={PIP_CHEER} />
++        <div className="colour-perch" aria-hidden="true">
++          <HouseCanvas className="colour-shelf" paint={paintShelf} />
++          <div className="colour-pip-bob">
++            <div className="colour-pip" ref={pipRef}>
++              <HouseCanvas className="colour-pip-art calm" paint={PIP_CALM} />
++              <HouseCanvas className="colour-pip-art cheer" paint={PIP_CHEER} />
++            </div>
+           </div>
+         </div>
+         <button
+diff --git a/src/game/colouring/colourArt.ts b/src/game/colouring/colourArt.ts
+index 34765fc..ae7d583 100644
+--- a/src/game/colouring/colourArt.ts
++++ b/src/game/colouring/colourArt.ts
+@@ -80,24 +80,27 @@ function paintColourSceneRaw(ctx: Ctx, w: number, h: number) {
+   const bx1 = w - rightUi - Math.max(14, w * 0.02);
+   const sag = h * 0.06;
+   const by = h * 0.035;
++  // release-1: the bunting starts right of the grown-up (home) button, tied to a pin of its own,
++  // so it never runs underneath the button (88 px hit box at max(12px, inset) + 8 px).
++  const bx0 = Math.min(bx1, 12 + 88 + Math.max(10, w * 0.012));
+   // Theme cycle 11c: a small or narrow canvas (the grown-up panel's mini card, the menu card in
+-  // portrait) has no room left of the tin: bx1 went negative, so every flag radius went negative
+-  // and createRadialGradient threw. Skip the bunting there; anywhere it fitted it is unchanged.
+-  if (bx1 > 0) paintBunting(ctx, w, bx1, by, sag);
++  // portrait) has no room left of the tin. Skip the bunting there.
++  if (bx1 - bx0 > 120 && h > 200) paintBunting(ctx, w, bx0, bx1, by, sag);
+   paintTable(ctx, w, h);
+ }
+ 
+-function paintBunting(ctx: Ctx, w: number, bx1: number, by: number, sag: number) {
++function paintBunting(ctx: Ctx, w: number, bx0: number, bx1: number, by: number, sag: number) {
++  const span = bx1 - bx0;
+   ctx.beginPath();
+-  ctx.moveTo(-10, by);
+-  ctx.quadraticCurveTo(bx1 / 2, by + sag * 2, bx1, by);
++  ctx.moveTo(bx0, by);
++  ctx.quadraticCurveTo(bx0 + span / 2, by + sag * 2, bx1, by);
+   stroke(ctx, Math.max(2.5, w * 0.003));
+-  const flags = Math.max(6, Math.round(bx1 / 110));
+-  const fw = Math.max(0, (bx1 / flags) * 0.62);
++  const flags = Math.max(5, Math.round(span / 110));
++  const fw = Math.max(0, (span / flags) * 0.62);
+   const ids: CrayonId[] = ["red", "yellow", "blue", "green", "pink", "orange", "purple", "sky"];
+   for (let i = 0; i < flags; i++) {
+     const t = (i + 0.5) / flags;
+-    const x = t * bx1;
++    const x = bx0 + t * span;
+     const y = by + sag * 2 * 2 * t * (1 - t) * 1.0;
+     const c = crayon(ids[i % ids.length]!);
+     cel(
+@@ -116,20 +119,22 @@ function paintBunting(ctx: Ctx, w: number, bx1: number, by: number, sag: number)
+       0.0025,
+     );
+   }
+-  // The pin the string is tied to.
++  // The pins the string is tied to.
+   const pinR = Math.max(4, w * 0.006);
+-  cel(
+-    ctx,
+-    w,
+-    () => {
+-      ctx.arc(bx1, by, pinR, 0, Math.PI * 2);
+-    },
+-    "#ffd000",
+-    bx1 - pinR * 0.3,
+-    by - pinR * 0.3,
+-    pinR,
+-    0.0025,
+-  );
++  for (const px of [bx0, bx1]) {
++    cel(
++      ctx,
++      w,
++      () => {
++        ctx.arc(px, by, pinR, 0, Math.PI * 2);
++      },
++      "#ffd000",
++      px - pinR * 0.3,
++      by - pinR * 0.3,
++      pinR,
++      0.0025,
++    );
++  }
+ }
+ 
+ function paintTable(ctx: Ctx, w: number, h: number) {
+@@ -539,3 +544,54 @@ export const paintToolIcon = (...a: Parameters<typeof paintToolIconRaw>) => safe
+ export const paintNextButton = (...a: Parameters<typeof paintNextButtonRaw>) => safePaint("next-button", paintNextButtonRaw(...a));
+ export const paintHelpIcon = (...a: Parameters<typeof paintHelpIconRaw>) => safePaint("help-icon", paintHelpIconRaw(...a));
+ export const paintAutoIcon = (...a: Parameters<typeof paintAutoIconRaw>) => safePaint("auto-icon", paintAutoIconRaw(...a));
++
++/**
++ * release-1: the little wall shelf Pip stands on in the art room (Pip's feet meet its top at 45%
++ * of this canvas's height; see .colour-perch). Honey wood like the table, navy outline, two
++ * brackets, and a soft contact shadow where Pip stands.
++ */
++function paintShelfRaw(ctx: Ctx, w: number, h: number) {
++  const o = Math.max(2, w * 0.032);
++  const top = h * 0.45;
++  const bot = h * 0.72;
++  const x0 = w * 0.05;
++  const x1 = w * 0.95;
++  // Brackets first, so the plank overlaps them.
++  for (const bx of [0.24, 0.76]) {
++    ctx.beginPath();
++    ctx.moveTo(w * bx - w * 0.06, bot - o * 0.3);
++    ctx.lineTo(w * bx + w * 0.06, bot - o * 0.3);
++    ctx.lineTo(w * bx, h - o * 0.8);
++    ctx.closePath();
++    ctx.fillStyle = "#d98f45";
++    ctx.fill();
++    stroke(ctx, o);
++  }
++  ctx.beginPath();
++  ctx.roundRect(x0, top, x1 - x0, bot - top, (bot - top) * 0.35);
++  const g = ctx.createLinearGradient(0, top, 0, bot);
++  g.addColorStop(0, "#ffd08f");
++  g.addColorStop(0.45, "#f2b46a");
++  g.addColorStop(1, "#d98f45");
++  ctx.fillStyle = g;
++  ctx.fill();
++  stroke(ctx, o);
++  // Grain and a top highlight.
++  ctx.strokeStyle = "rgba(160, 90, 30, 0.35)";
++  ctx.lineWidth = Math.max(1, o * 0.45);
++  ctx.beginPath();
++  ctx.moveTo(x0 + w * 0.12, top + (bot - top) * 0.62);
++  ctx.lineTo(x0 + w * 0.36, top + (bot - top) * 0.62);
++  ctx.moveTo(x1 - w * 0.34, top + (bot - top) * 0.5);
++  ctx.lineTo(x1 - w * 0.12, top + (bot - top) * 0.5);
++  ctx.stroke();
++  ctx.strokeStyle = "rgba(255, 255, 255, 0.6)";
++  ctx.lineWidth = Math.max(1, o * 0.5);
++  ctx.beginPath();
++  ctx.moveTo(x0 + w * 0.08, top + o * 0.9);
++  ctx.lineTo(x1 - w * 0.08, top + o * 0.9);
++  ctx.stroke();
++  contact(ctx, w / 2, top + o * 0.4, w * 0.24, Math.max(2, (bot - top) * 0.28));
++}
++
++export const paintShelf = safePaint("colour-shelf", paintShelfRaw);
+diff --git a/src/game/piano/pianoArt.ts b/src/game/piano/pianoArt.ts
+index 551be8a..aed279d 100644
+--- a/src/game/piano/pianoArt.ts
++++ b/src/game/piano/pianoArt.ts
+@@ -60,6 +60,32 @@ export function noteGlyph(ctx: Ctx, x: number, y: number, s: number, fill: strin
+   cel(ctx, ref, path, fill, x - s * 0.14, y - s * 0.1, s * 0.3, 0.0024);
+ }
+ 
++/** Where the wall notes can sit clear of the pick buttons and the piano (CSS px). */
++export function wallNotes(w: number, h: number) {
++  const vw = w / 100;
++  const vh = h / 100;
++  const pick = Math.max(54, Math.min(Math.min(19 * vh, 9 * vw), 96));
++  const toyW = Math.min(80 * vw, w - 140, (92 * vh - pick - 34) * 2.4, 1180);
++  const toyH = toyW / 2.4;
++  const rigTop = h - Math.max(10, 8 * vh) - toyH;
++  const rigLeft = (w - toyW) / 2;
++  const rigRight = rigLeft + toyW;
++  const picksBottom = 10 + pick;
++  const s = Math.max(22, Math.min(w, h) * 0.065);
++  // A note glyph spans about 1.1 s above its head centre and 0.3 s below.
++  const out: { x: number; y: number; s: number; fill: string }[] = [];
++  const band = rigTop - picksBottom;
++  if (band >= s * 1.9) {
++    const y = picksBottom + band * 0.5 + s * 0.4;
++    out.push({ x: rigLeft + toyW * 0.12, y, s, fill: "#ff9cc8" });
++    out.push({ x: rigRight - toyW * 0.14, y: y - s * 0.2, s: s * 0.9, fill: "#6fe0f2" });
++  } else if (w - rigRight >= s * 1.6) {
++    // Short screens: one note in the clear wall to the right of the piano (Pip has the left).
++    out.push({ x: rigRight + (w - rigRight) * 0.45, y: rigTop + s * 1.3, s: Math.min(s, (w - rigRight) * 0.5), fill: "#6fe0f2" });
++  }
++  return out;
++}
++
+ /** The toy-stage backdrop: lilac wall with stars, red curtains, a gold-trim valance, honey stage. */
+ export function paintPianoScene(ctx: Ctx, w: number, h: number) {
+   const g = ctx.createLinearGradient(0, 0, 0, h);
+@@ -89,12 +115,10 @@ export function paintPianoScene(ctx: Ctx, w: number, h: number) {
+       }
+     }
+   }
+-  // Faint notes on the wall, our own glyphs.
+-  ctx.save();
+-  ctx.globalAlpha = 0.5;
+-  noteGlyph(ctx, w * 0.2, h * 0.34, Math.min(w, h) * 0.07, "#ffd0e4", w);
+-  noteGlyph(ctx, w * 0.8, h * 0.3, Math.min(w, h) * 0.06, "#c8f6ff", w);
+-  ctx.restore();
++  // Notes on the wall, our own glyphs, in full colour with the navy line. release-1: they only go
++  // where the piano will not cover them (the same layout maths as .piano-rig / .piano-picks), so they
++  // are never half hidden behind the toy; with no clear room they are left out.
++  for (const n of wallNotes(w, h)) noteGlyph(ctx, n.x, n.y, n.s, n.fill, w);
+   // Stage floor: honey wood with planks and a bold front edge.
+   const fy = h * 0.8;
+   {
+diff --git a/src/styles.css b/src/styles.css
+index 775e983..3f1ed63 100644
+--- a/src/styles.css
++++ b/src/styles.css
+@@ -67,27 +67,10 @@
+ }
+ 
+ .game-ui button,
+-.panel,
+-.modal-back {
+-  pointer-events: auto;
+-}
+-
+-.corner-sound {
+-  position: absolute;
+-  top: max(0.75rem, env(safe-area-inset-top));
+-  right: max(0.75rem, env(safe-area-inset-right));
+-  z-index: 3;
++.panel {
+   pointer-events: auto;
+ }
+ 
+-.dock {
+-  position: absolute;
+-  left: 50%;
+-  bottom: max(0.85rem, env(safe-area-inset-bottom));
+-  transform: translateX(-50%);
+-  width: min(28rem, calc(100% - 1.25rem));
+-}
+-
+ .panel {
+   background: var(--color-foam);
+   border-radius: 2rem;
+@@ -97,42 +80,6 @@
+   animation: rise 420ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+ }
+ 
+-.kicker {
+-  margin: 0;
+-  font-size: 0.85rem;
+-  font-weight: 600;
+-  letter-spacing: 0.08em;
+-  text-transform: uppercase;
+-  color: var(--muted);
+-}
+-
+-.logo {
+-  margin: 0.15rem 0 0.25rem;
+-  font-size: clamp(2.6rem, 8vw, 4.1rem);
+-  line-height: 0.95;
+-  font-weight: 700;
+-  letter-spacing: -0.03em;
+-  color: var(--color-ink);
+-}
+-
+-.logo.logo-sm {
+-  font-size: 2.5rem;
+-}
+-
+-.logo-mark {
+-  display: block;
+-  margin: 0 auto 0.15rem;
+-  color: var(--color-coral);
+-}
+-
+-.lede {
+-  margin: 0 auto 1rem;
+-  max-width: 22rem;
+-  font-size: 1.05rem;
+-  line-height: 1.45;
+-  color: var(--muted);
+-}
+-
+ .stack {
+   display: flex;
+   flex-direction: column;
+@@ -162,33 +109,6 @@
+   outline-offset: 3px;
+ }
+ 
+-.btn-play {
+-  min-height: 4.25rem;
+-  font-size: 1.55rem;
+-  background: var(--color-coral);
+-  color: var(--color-foam);
+-  box-shadow: 0 0.55rem 0 var(--coral-deep), 0 1rem 1.4rem color-mix(in srgb, var(--color-coral) 32%, transparent);
+-}
+-
+-.btn-play:active {
+-  box-shadow: 0 0.2rem 0 var(--coral-deep);
+-}
+-
+-.btn-secondary {
+-  min-height: 3.4rem;
+-  font-size: 1.15rem;
+-  background: var(--color-cream);
+-  color: var(--color-ink);
+-  box-shadow: inset 0 0 0 3px var(--line);
+-}
+-
+-.btn-ghost {
+-  min-height: 2.75rem;
+-  font-size: 1.05rem;
+-  background: transparent;
+-  color: var(--color-ink);
+-}
+-
+ .levels {
+   display: grid;
+   grid-template-columns: repeat(6, minmax(0, 1fr));
+@@ -196,83 +116,12 @@
+   margin-top: 0.85rem;
+ }
+ 
+-.level-label {
+-  margin: 0.9rem 0 0.35rem;
+-  font-size: 0.85rem;
+-  font-weight: 600;
+-  color: var(--muted);
+-}
+-
+-.level-btn {
+-  min-height: 2.85rem;
+-  border-radius: 1rem;
+-  font-size: 1.05rem;
+-  background: var(--color-cream);
+-  color: var(--color-ink);
+-  box-shadow: inset 0 0 0 2px var(--line);
+-}
+-
+-.level-btn.silver {
+-  background: color-mix(in srgb, var(--color-sun) 42%, var(--color-foam));
+-}
+-
+-.level-btn.gold {
+-  background: var(--color-sun);
+-  box-shadow: none;
+-}
+-
+-.sound-row {
+-  margin-top: 0.75rem;
+-  display: flex;
+-  justify-content: center;
+-}
+-
+-.icon-btn {
+-  width: 3rem;
+-  height: 3rem;
+-  border-radius: 999px;
+-  background: var(--color-cream);
+-  color: var(--color-ink);
+-  box-shadow: inset 0 0 0 2px var(--line);
+-}
+-
+ .best {
+   margin: 0.45rem 0 0;
+   font-size: 0.95rem;
+   color: var(--muted);
+ }
+ 
+-.hud {
+-  padding: max(0.75rem, env(safe-area-inset-top)) 0.75rem 0;
+-  display: flex;
+-  flex-direction: column;
+-  align-items: center;
+-  gap: 0.45rem;
+-}
+-
+-.hud-top {
+-  width: min(46rem, 100%);
+-  display: flex;
+-  flex-wrap: nowrap;
+-  align-items: center;
+-  gap: 0.4rem;
+-}
+-
+-.pill,
+-.count-pill {
+-  min-height: 2.6rem;
+-  padding: 0 0.75rem;
+-  border-radius: 999px;
+-  display: inline-flex;
+-  align-items: center;
+-  justify-content: center;
+-  font-weight: 700;
+-  font-size: 0.98rem;
+-  flex: 0 0 auto;
+-  background: var(--color-foam);
+-  box-shadow: var(--shadow);
+-}
+-
+ .track {
+   flex: 1 1 auto;
+   min-width: 2.2rem;
+@@ -290,27 +139,11 @@
+   transition: width 240ms ease-out;
+ }
+ 
+-.coach,
+ .toast {
+   background: var(--color-foam);
+   box-shadow: var(--shadow);
+ }
+ 
+-.hud-actions {
+-  display: flex;
+-  gap: 0.35rem;
+-  flex: 0 0 auto;
+-}
+-
+-.chips {
+-  width: min(46rem, 100%);
+-  display: flex;
+-  flex-wrap: wrap;
+-  justify-content: center;
+-  gap: 0.35rem;
+-  padding: 0 0.35rem;
+-}
+-
+ .chip {
+   border-radius: 999px;
+   padding: 0.12rem 0.6rem;
+@@ -320,12 +153,6 @@
+   box-shadow: 0 3px 0 color-mix(in srgb, var(--color-ink) 12%, transparent);
+ }
+ 
+-.chip-dot {
+-  width: 1.35rem;
+-  height: 1.35rem;
+-  padding: 0;
+-}
+-
+ .bubble-dock {
+   position: absolute;
+   left: 50%;
+@@ -361,19 +188,6 @@
+   transition: scale 220ms cubic-bezier(0.34, 1.56, 0.64, 1);
+ }
+ 
+-.bubble-orb .orb-face {
+-  position: absolute;
+-  inset: 8%;
+-  width: 84%;
+-  height: 84%;
+-  pointer-events: none;
+-}
+-.bubble-orb .orb-eyes-shut,
+-.bubble-orb .orb-grin { display: none; }
+-.bubble-orb.is-happy .orb-eyes-open,
+-.bubble-orb.is-happy .orb-smile { display: none; }
+-.bubble-orb.is-happy .orb-eyes-shut,
+-.bubble-orb.is-happy .orb-grin { display: inline; }
+ .bubble-orb.is-happy { animation: orb-hop 520ms cubic-bezier(0.34, 1.56, 0.64, 1); }
+ @keyframes orb-hop {
+   0% { scale: 0.93; }
+@@ -406,17 +220,6 @@
+   }
+ }
+ 
+-.coach {
+-  margin: 0;
+-  max-width: min(36rem, calc(100% - 1rem));
+-  border-radius: 1.25rem;
+-  padding: 0.55rem 0.9rem;
+-  text-align: center;
+-  font-size: 1.02rem;
+-  line-height: 1.4;
+-  font-weight: 600;
+-}
+-
+ .toast {
+   margin: 0;
+   border-radius: 999px;
+@@ -428,20 +231,6 @@
+   animation: pop 480ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+ }
+ 
+-.modal-back {
+-  position: absolute;
+-  inset: 0;
+-  background: color-mix(in srgb, var(--color-ink) 28%, transparent);
+-  backdrop-filter: blur(7px);
+-  display: grid;
+-  place-items: center;
+-  padding: 1rem;
+-}
+-
+-.modal-card {
+-  width: min(26rem, 100%);
+-}
+-
+ .stars {
+   display: flex;
+   justify-content: center;
+@@ -471,30 +260,6 @@
+   color: var(--line);
+ }
+ 
+-.big-num {
+-  margin: 0;
+-  font-size: 4rem;
+-  line-height: 0.9;
+-  font-weight: 700;
+-  color: var(--color-ink);
+-}
+-
+-.btn-mini {
+-  min-height: 2.75rem;
+-  padding: 0 0.9rem;
+-  font-size: 1rem;
+-  background: var(--color-foam);
+-  color: var(--color-ink);
+-  box-shadow: var(--shadow);
+-}
+-
+-.win-count {
+-  margin: 0.2rem 0 0.85rem;
+-  font-size: 1.15rem;
+-  font-weight: 600;
+-  color: var(--muted);
+-}
+-
+ @keyframes rise {
+   from {
+     opacity: 0;
+@@ -517,27 +282,12 @@
+   }
+ }
+ 
+-@media (hover: hover) {
+-  .btn-play:hover {
+-    background: color-mix(in srgb, var(--color-coral) 88%, white);
+-  }
+-  .btn-secondary:hover,
+-  .level-btn:hover,
+-  .icon-btn:hover {
+-    background: white;
+-  }
+-}
+-
+ @media (max-height: 520px) {
+   .panel {
+     padding: 0.6rem 0.7rem 0.65rem;
+   }
+-  .logo {
+-    font-size: 1.7rem;
+-  }
+-  .dock {
+-    bottom: 0.35rem;
+-  }
++  
++  
+   .pip-badge {
+     height: 3.1rem;
+     scale: 0.78;
+@@ -551,31 +301,18 @@
+     border-radius: 1.15rem;
+     padding: 0.35rem;
+   }
+-  .level-token {
+-    min-height: 2.15rem;
+-  }
++  
+ }
+ 
+ @media (prefers-reduced-motion: reduce) {
+   .panel,
+-  .toast,
+-  .star.on,
+-  .fill,
+-  .pip-badge,
+-  .pip-wing,
+-  .splash-pot,
+-  .toy-fall,
+-  .mini-pot,
+-  .b-bob,
+-  .b-string,
+-  .b-spark,
+-  .bub,
+-  .art-sun,
+-  .art-cloud,
+-  .home-card,
+-  .pop-dome.is-live,
+-  .pop-spark,
+-  .pop-finger {
++.toast,
++.star.on,
++.fill,
++.pip-badge,
++.pip-wing,
++.splash-pot,
++.home-card {
+     animation: none;
+     transition: none;
+   }
+@@ -793,8 +530,7 @@
+   animation: card-zoom 250ms cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+ }
+ 
+-.home-play:focus-visible,
+-.level-token:focus-visible {
++.home-play:focus-visible {
+   outline: 3px solid var(--color-ink);
+   outline-offset: 3px;
+ }
+@@ -817,65 +553,6 @@
+   animation: press-ring 320ms ease-out;
+ }
+ 
+-.level-rail {
+-  position: relative;
+-  z-index: 1;
+-  display: flex;
+-  gap: 0.28rem;
+-  padding: 0.05rem 0.1rem 0.15rem;
+-}
+-
+-.level-token {
+-  flex: 1 1 0;
+-  min-width: 0;
+-  min-height: 2.75rem;
+-  border: 0;
+-  border-radius: 0.85rem;
+-  background: rgb(255 253 248 / 86%);
+-  color: var(--color-coral);
+-  box-shadow: inset 0 0 0 2px rgb(58 42 74 / 8%), 0 0.16rem 0 rgb(58 42 74 / 8%);
+-  display: grid;
+-  place-items: center;
+-  padding: 0.12rem;
+-  transition: scale 150ms ease-out, translate 150ms ease-out;
+-}
+-
+-.level-token:active,
+-.level-token.is-down {
+-  scale: 0.96;
+-  translate: 0 2px;
+-}
+-
+-.level-token.silver {
+-  background: color-mix(in srgb, var(--color-sun) 48%, white);
+-}
+-
+-.level-token.gold {
+-  background: var(--color-sun);
+-  box-shadow: 0 0.16rem 0 #e0a020;
+-}
+-
+-.token-free {
+-  flex: 0 0 2.75rem;
+-  background: white;
+-}
+-
+-.dot-cluster {
+-  display: flex;
+-  flex-wrap: wrap;
+-  justify-content: center;
+-  gap: 2px;
+-  width: 1.5rem;
+-}
+-
+-.swatch-dot {
+-  width: 0.42rem;
+-  height: 0.42rem;
+-  border-radius: 99px;
+-  background: var(--swatch);
+-  box-shadow: inset 0 -1px 0 rgb(0 0 0 / 18%);
+-}
+-
+ .art {
+   position: absolute;
+   inset: 0;
+@@ -883,354 +560,6 @@
+   pointer-events: none;
+ }
+ 
+-.art-hill {
+-  position: absolute;
+-  left: -12%;
+-  right: -12%;
+-  bottom: -28%;
+-  height: 52%;
+-  border-radius: 50%;
+-  background: linear-gradient(180deg, #9ae492, #5cbf6e);
+-}
+-
+-.art-table {
+-  position: absolute;
+-  left: 7%;
+-  right: 7%;
+-  bottom: 9%;
+-  height: 0.72rem;
+-  border-radius: 0.4rem;
+-  background: linear-gradient(180deg, #ffe3c4, #e8bc90);
+-  box-shadow: 0 0.32rem 0 #d7a574;
+-}
+-
+-.pot-stage {
+-  position: absolute;
+-  left: 4%;
+-  right: 4%;
+-  bottom: 18%;
+-  height: 62%;
+-  display: flex;
+-  align-items: flex-end;
+-  justify-content: center;
+-  gap: 4%;
+-}
+-
+-.pot-slot {
+-  position: relative;
+-  width: 30%;
+-  height: 100%;
+-}
+-
+-.toy-fall {
+-  position: absolute;
+-  left: 0;
+-  right: 0;
+-  top: 0;
+-  height: 40%;
+-  display: grid;
+-  place-items: center;
+-  animation: toy-fall 3.6s cubic-bezier(0.45, 0.05, 0.55, 1) infinite;
+-}
+-
+-.pot-slot:nth-child(2) .toy-fall,
+-.pot-slot:nth-child(2) .mini-pot { animation-delay: 0.55s; }
+-
+-.pot-slot:nth-child(3) .toy-fall,
+-.pot-slot:nth-child(3) .mini-pot { animation-delay: 1.15s; }
+-
+-.mini-toy {
+-  display: block;
+-  width: 4.2rem;
+-  height: 4.2rem;
+-}
+-
+-.land-spark {
+-  position: absolute;
+-  left: 50%;
+-  top: 70%;
+-  width: 0.7rem;
+-  height: 0.7rem;
+-  margin-left: -0.35rem;
+-  border-radius: 50%;
+-  background: white;
+-  opacity: 0;
+-  box-shadow: 0 0 0 0.25rem rgb(255 244 180 / 0);
+-  animation: land-spark 3.6s ease-out infinite;
+-}
+-
+-.pot-slot:nth-child(2) .land-spark { animation-delay: 0.55s; }
+-.pot-slot:nth-child(3) .land-spark { animation-delay: 1.15s; }
+-
+-.toy-ball {
+-  border-radius: 50%;
+-  background:
+-    radial-gradient(circle at 32% 28%, white 0 10%, transparent 11%),
+-    radial-gradient(circle at 40% 40%, color-mix(in srgb, var(--swatch) 50%, white), var(--swatch) 62%, color-mix(in srgb, var(--swatch) 60%, black));
+-  box-shadow: 0 0.2rem 0.3rem rgb(58 42 74 / 16%);
+-}
+-
+-.toy-block {
+-  width: 1.7rem;
+-  height: 1.7rem;
+-  border-radius: 0.32rem;
+-  background: linear-gradient(145deg, color-mix(in srgb, var(--swatch) 40%, white), var(--swatch) 55%, color-mix(in srgb, var(--swatch) 70%, black));
+-  box-shadow: 0 0.2rem 0.3rem rgb(58 42 74 / 16%);
+-}
+-
+-.toy-pyramid {
+-  width: 2rem;
+-  height: 1.75rem;
+-  background: linear-gradient(180deg, color-mix(in srgb, var(--swatch) 45%, white), var(--swatch));
+-  clip-path: polygon(50% 0, 100% 100%, 0 100%);
+-  filter: drop-shadow(0 0.15rem 0.15rem rgb(58 42 74 / 16%));
+-}
+-
+-.mini-pot {
+-  position: absolute;
+-  left: 0;
+-  right: 0;
+-  bottom: 2%;
+-  height: 34%;
+-  border-radius: 46% 46% 40% 40%;
+-  background: linear-gradient(90deg, color-mix(in srgb, var(--swatch) 70%, black), var(--swatch) 30%, color-mix(in srgb, var(--swatch) 65%, white) 72%, var(--swatch));
+-  box-shadow: inset 0 -0.35rem 0 rgb(0 0 0 / 12%), 0 0.28rem 0 color-mix(in srgb, var(--swatch) 35%, #6b4424);
+-  animation: pot-gulp 3.6s ease-in-out infinite;
+-}
+-
+-.mini-pot::before {
+-  content: "";
+-  position: absolute;
+-  left: -8%;
+-  right: -8%;
+-  top: -0.38rem;
+-  height: 0.62rem;
+-  border-radius: 999px;
+-  background: linear-gradient(180deg, color-mix(in srgb, var(--swatch) 30%, white), var(--swatch));
+-}
+-
+-.pot-face {
+-  position: absolute;
+-  left: 0;
+-  right: 0;
+-  top: 32%;
+-  height: 42%;
+-}
+-
+-.pot-face i,
+-.pot-face b {
+-  position: absolute;
+-  top: 0;
+-  width: 0.42rem;
+-  height: 0.42rem;
+-  border-radius: 50%;
+-  background: #fffdfb;
+-  box-shadow: inset 0.12rem 0.08rem 0 #2a2140;
+-}
+-
+-.pot-face i:first-child { left: 22%; }
+-.pot-face i:nth-child(2) { right: 22%; }
+-.pot-face b {
+-  left: 32%;
+-  right: 32%;
+-  top: 0.55rem;
+-  width: auto;
+-  height: 0.28rem;
+-  border-radius: 0 0 0.4rem 0.4rem;
+-  background: transparent;
+-  box-shadow: none;
+-  border: 2px solid #fffdfb;
+-  border-top: 0;
+-}
+-
+-.pot-well {
+-  position: absolute;
+-  left: 18%;
+-  right: 18%;
+-  top: 0.12rem;
+-  height: 0.38rem;
+-  border-radius: 999px;
+-  background: color-mix(in srgb, var(--swatch) 35%, black);
+-  opacity: 0.55;
+-}
+-
+-.art-sun {
+-  position: absolute;
+-  right: 10%;
+-  top: 9%;
+-  width: 2.3rem;
+-  height: 2.3rem;
+-  border-radius: 50%;
+-  background: radial-gradient(circle at 38% 36%, #fff8c8, #ffe566 46%, #ffc14d);
+-  box-shadow: 0 0 0 0.55rem rgb(255 226 120 / 35%);
+-  animation: sun-breathe 4s ease-in-out infinite;
+-}
+-
+-.art-cloud {
+-  position: absolute;
+-  height: 0.95rem;
+-  border-radius: 999px;
+-  background: white;
+-  box-shadow:
+-    0.85rem 0.12rem 0 -0.15rem white,
+-    -0.75rem 0.18rem 0 -0.18rem white;
+-  animation: cloud-drift 7s ease-in-out infinite;
+-}
+-
+-.art-cloud-a { width: 2.2rem; left: 8%; top: 16%; }
+-.art-cloud-b {
+-  width: 1.6rem;
+-  left: 36%;
+-  top: 8%;
+-  opacity: 0.85;
+-  animation-duration: 9s;
+-  animation-direction: reverse;
+-}
+-
+-.float-balloon {
+-  position: absolute;
+-  width: 28%;
+-}
+-
+-.b-pos-a { left: 6%; bottom: 16%; }
+-.b-pos-b { left: 36%; bottom: 28%; }
+-.b-pos-c { right: 6%; bottom: 14%; }
+-
+-.b-bob {
+-  display: flex;
+-  flex-direction: column;
+-  align-items: center;
+-  position: relative;
+-  animation: balloon-float 3.4s ease-in-out infinite;
+-}
+-
+-.b-pos-a .b-bob { animation-delay: -0.4s; }
+-.b-pos-c .b-bob { animation-delay: -1.6s; }
+-.b-pop .b-bob { animation: balloon-float-pop 4.6s ease-in-out infinite; }
+-
+-.art-fence {
+-  position: absolute;
+-  left: 0;
+-  right: 0;
+-  bottom: 28%;
+-  height: 18%;
+-  background: repeating-linear-gradient(90deg, #f4f7fb 0 10px, transparent 10px 16px);
+-  border-top: 3px solid #eef2f6;
+-  opacity: 0.9;
+-  pointer-events: none;
+-}
+-
+-.b-kind-heart .b-body {
+-  aspect-ratio: 1 / 1;
+-  border-radius: 50% 50% 8% 8%;
+-  clip-path: path("M 50 88 C 18 64 6 40 22 24 C 34 14 50 22 50 36 C 50 22 66 14 78 24 C 94 40 82 64 50 88 Z");
+-}
+-
+-.b-kind-star .b-body {
+-  aspect-ratio: 1 / 1;
+-  border-radius: 0;
+-  clip-path: polygon(50% 4%, 62% 36%, 96% 38%, 70% 58%, 80% 92%, 50% 74%, 20% 92%, 30% 58%, 4% 38%, 38% 36%);
+-}
+-
+-.b-body {
+-  width: 100%;
+-  aspect-ratio: 4 / 5;
+-  border-radius: 50% 50% 46% 46%;
+-  position: relative;
+-  background:
+-    radial-gradient(circle at 32% 28%, rgb(255 255 255 / 95%) 0 8%, transparent 9%),
+-    radial-gradient(circle at 40% 38%, color-mix(in srgb, var(--swatch) 50%, white), var(--swatch) 58%, color-mix(in srgb, var(--swatch) 62%, black));
+-  box-shadow: inset -0.28rem -0.4rem 0 rgb(0 0 0 / 8%), 0 0.35rem 0.5rem rgb(58 42 74 / 12%);
+-}
+-
+-.b-eye {
+-  position: absolute;
+-  top: 34%;
+-  width: 18%;
+-  height: 22%;
+-  background: #fff;
+-  border: 2px solid #2a1c28;
+-  border-radius: 50%;
+-}
+-.b-eye.l { left: 22%; }
+-.b-eye.r { right: 22%; }
+-.b-eye::after {
+-  content: "";
+-  position: absolute;
+-  left: 28%;
+-  top: 32%;
+-  width: 42%;
+-  height: 48%;
+-  background: #2a1c28;
+-  border-radius: 50%;
+-}
+-.b-smile {
+-  position: absolute;
+-  left: 30%;
+-  right: 30%;
+-  top: 58%;
+-  height: 16%;
+-  border: 3px solid #2a1c28;
+-  border-top: 0;
+-  border-radius: 0 0 1rem 1rem;
+-  background: #3a1020;
+-}
+-
+-.b-knot {
+-  width: 0.4rem;
+-  height: 0.32rem;
+-  margin-top: -0.04rem;
+-  background: var(--swatch);
+-  clip-path: polygon(50% 100%, 0 0, 100% 0);
+-}
+-
+-.b-string {
+-  width: 2px;
+-  height: 2.4rem;
+-  background: rgb(58 42 74 / 35%);
+-  transform-origin: top center;
+-  animation: string-sway 3.4s ease-in-out infinite;
+-}
+-
+-.b-spark {
+-  position: absolute;
+-  left: 50%;
+-  top: 1.15rem;
+-  width: 0.38rem;
+-  height: 0.38rem;
+-  margin-left: -0.19rem;
+-  border-radius: 50%;
+-  background: white;
+-  opacity: 0;
+-}
+-
+-.b-pop .b-spark { animation: spark-out 4.6s ease-out infinite; }
+-.b-spark.s1 { --dx: -16px; --dy: -14px; background: #fff6c8; }
+-.b-spark.s2 { --dx: 16px; --dy: -12px; background: white; }
+-.b-spark.s3 { --dx: -12px; --dy: 10px; background: #fff; }
+-.b-spark.s4 { --dx: 14px; --dy: 8px; background: #fff6c8; }
+-
+-.art-bubbles {
+-  display: flex;
+-  align-items: flex-end;
+-  justify-content: center;
+-  gap: 7%;
+-  padding: 12% 8% 8%;
+-}
+-
+-.water-ray {
+-  position: absolute;
+-  top: -8%;
+-  width: 16%;
+-  height: 68%;
+-  background: linear-gradient(180deg, rgb(255 255 255 / 20%), transparent);
+-  transform: rotate(8deg);
+-  pointer-events: none;
+-}
+-
+-.ray-a { left: 18%; }
+-.ray-b { right: 16%; transform: rotate(-10deg); }
+-
+ .tube {
+   position: relative;
+   width: 22%;
+@@ -1243,59 +572,6 @@
+   overflow: hidden;
+ }
+ 
+-.bub.b4 {
+-  width: 40%;
+-  margin-left: -8%;
+-  animation-delay: -1.3s;
+-  animation-duration: 3.1s;
+-}
+-
+-.bub {
+-  position: absolute;
+-  left: 50%;
+-  bottom: 18%;
+-  width: 62%;
+-  margin-left: -31%;
+-  aspect-ratio: 1;
+-  border-radius: 50%;
+-  background:
+-    radial-gradient(circle at 32% 30%, rgb(255 255 255 / 95%) 0 14%, transparent 15%),
+-    radial-gradient(circle at 42% 42%, color-mix(in srgb, var(--swatch) 25%, white), var(--swatch));
+-  animation: bubble-rise 2.8s ease-in infinite;
+-}
+-
+-.bub.b2 {
+-  width: 34%;
+-  margin-left: -8%;
+-  bottom: 46%;
+-  animation-delay: -0.9s;
+-  animation-duration: 3.4s;
+-}
+-
+-.bub.b3 {
+-  width: 26%;
+-  margin-left: -22%;
+-  bottom: 68%;
+-  animation-delay: -1.8s;
+-  animation-duration: 2.5s;
+-}
+-
+-.bub.b5 {
+-  width: 40%;
+-  margin-left: -36%;
+-  bottom: 84%;
+-  animation-delay: -2.3s;
+-  animation-duration: 3.6s;
+-}
+-
+-.bub.b6 {
+-  width: 28%;
+-  margin-left: 2%;
+-  bottom: 36%;
+-  animation-delay: -0.45s;
+-  animation-duration: 3.1s;
+-}
+-
+ .pip-badge {
+   height: auto;
+   display: grid;
+@@ -1331,17 +607,6 @@
+   background: #ffc9a8;
+ }
+ 
+-.pip-head {
+-  position: absolute;
+-  left: 1.05rem;
+-  top: 0.85rem;
+-  width: 3.2rem;
+-  height: 2.85rem;
+-  border-radius: 50%;
+-  background: radial-gradient(circle at 36% 30%, #fff6c4, #ffd23a 60%, #f0b429);
+-  box-shadow: inset 0 -0.18rem 0 rgb(180 90 50 / 10%);
+-}
+-
+ .pip-tuft {
+   position: absolute;
+   left: 1.25rem;
+@@ -1413,30 +678,6 @@
+   animation-direction: reverse;
+ }
+ 
+-.pip-leg {
+-  position: absolute;
+-  top: 5.7rem;
+-  width: 0.38rem;
+-  height: 1.55rem;
+-  border-radius: 0.2rem;
+-  background: #f0b429;
+-}
+-
+-.pip-leg-l { left: 1.85rem; }
+-.pip-leg-r { right: 1.85rem; }
+-
+-.pip-foot {
+-  position: absolute;
+-  top: 7.05rem;
+-  width: 0.85rem;
+-  height: 0.38rem;
+-  border-radius: 0.2rem 0.45rem 0.2rem 0.2rem;
+-  background: #ff8a3d;
+-}
+-
+-.pip-foot-l { left: 1.55rem; }
+-.pip-foot-r { right: 1.55rem; }
+-
+ @keyframes pot-hop {
+   0%, 100% { transform: translateY(0); }
+   35% { transform: translateY(-12px); }
+@@ -1455,76 +696,17 @@
+ 
+ @keyframes card-in {
+   from { translate: 0 16px; }
+-  to { translate: 0 0; }
+-}
+-
+-@keyframes card-bob {
+-  0%, 100% { translate: 0 0; }
+-  50% { translate: 0 -8px; }
+-}
+-
+-@keyframes press-ring {
+-  from { opacity: 0.75; scale: 0.55; }
+-  to { opacity: 0; scale: 1.2; }
+-}
+-
+-@keyframes toy-fall {
+-  0% { transform: translateY(0) scale(1); opacity: 1; }
+-  20% { transform: translateY(-8%) scale(1.06, 0.94); opacity: 1; }
+-  46% { transform: translateY(125%) scale(0.94, 1.08); opacity: 1; }
+-  54% { transform: translateY(145%) scale(1.16, 0.74); opacity: 0; }
+-  66% { transform: translateY(-10%) scale(0.7); opacity: 0; }
+-  80%, 100% { transform: translateY(0) scale(1); opacity: 1; }
+-}
+-
+-@keyframes pot-gulp {
+-  0%, 36% { transform: scale(1, 1); }
+-  48% { transform: scale(1.12, 0.86); }
+-  60% { transform: scale(0.96, 1.08); }
+-  72%, 100% { transform: scale(1, 1); }
+-}
+-
+-@keyframes balloon-float {
+-  0%, 100% { transform: translateY(0) rotate(-3deg); }
+-  50% { transform: translateY(-10px) rotate(3.5deg); }
+-}
+-
+-@keyframes balloon-float-pop {
+-  0% { transform: translateY(0) rotate(-3deg) scale(1); opacity: 1; }
+-  28% { transform: translateY(-9px) rotate(3deg) scale(1); opacity: 1; }
+-  58% { transform: translateY(-3px) rotate(-2deg) scale(1); opacity: 1; }
+-  68% { transform: translateY(-4px) scale(1.12); opacity: 1; }
+-  74% { transform: translateY(-2px) scale(1.38); opacity: 0; }
+-  76% { transform: translateY(8px) scale(0.35); opacity: 0; }
+-  90%, 100% { transform: translateY(0) scale(1); opacity: 1; }
+-}
+-
+-@keyframes string-sway {
+-  0%, 100% { transform: rotate(8deg); }
+-  50% { transform: rotate(-8deg); }
+-}
+-
+-@keyframes spark-out {
+-  0%, 66% { opacity: 0; transform: translate(0, 0) scale(0.4); }
+-  74% { opacity: 1; }
+-  90%, 100% { opacity: 0; transform: translate(var(--dx), var(--dy)) scale(1); }
+-}
+-
+-@keyframes sun-breathe {
+-  0%, 100% { transform: scale(1); }
+-  50% { transform: scale(1.06); }
++  to { translate: 0 0; }
+ }
+ 
+-@keyframes cloud-drift {
+-  0%, 100% { transform: translateX(0); }
+-  50% { transform: translateX(8px); }
++@keyframes card-bob {
++  0%, 100% { translate: 0 0; }
++  50% { translate: 0 -8px; }
+ }
+ 
+-@keyframes bubble-rise {
+-  0% { transform: translateY(18%) scale(0.72); opacity: 0.15; }
+-  10% { opacity: 0.95; }
+-  78% { opacity: 0.9; }
+-  100% { transform: translateY(-210%) scale(1); opacity: 0; }
++@keyframes press-ring {
++  from { opacity: 0.75; scale: 0.55; }
++  to { opacity: 0; scale: 1.2; }
+ }
+ 
+ @media (max-width: 900px) {
+@@ -1574,27 +756,13 @@
+     min-height: 0;
+   }
+ 
+-  .level-token {
+-    min-height: 2.15rem;
+-  }
++  
+ 
+   .home-grid {
+     gap: 0.4rem;
+   }
+ }
+ 
+-.pip-perch {
+-  position: absolute;
+-  left: 50%;
+-  top: calc(50% - 12px);
+-  z-index: 6;
+-  width: 5.4rem;
+-  height: 8.4rem;
+-  translate: -50% -92%;
+-  filter: drop-shadow(0 8px 0 rgb(58 42 74 / 10%));
+-  pointer-events: none;
+-}
+-
+ .home-card.is-zoom {
+   z-index: 5;
+ }
+@@ -1603,178 +771,12 @@
+   to { scale: 1.08; }
+ }
+ 
+-@keyframes land-spark {
+-  0%, 42% { opacity: 0; transform: scale(0.3); }
+-  50% { opacity: 1; transform: scale(1); box-shadow: 0 0 0 0.35rem rgb(255 244 180 / 55%); }
+-  68%, 100% { opacity: 0; transform: scale(1.4); }
+-}
+-
+-.art-hill-front {
+-  height: 28%;
+-  bottom: -8%;
+-  background: linear-gradient(180deg, #b6e892, #67c56e);
+-}
+-
+-.art-fish { overflow: hidden; }
+-
+-.sea-back {
+-  position: absolute;
+-  inset: 0;
+-  background:
+-    radial-gradient(40% 20% at 20% 18%, rgb(255 255 255 / 35%), transparent 70%),
+-    linear-gradient(180deg, #b7f3ff 0%, #2aa3c9 42%, #0c5f86 100%);
+-}
+-
+-.sea-sand {
+-  position: absolute;
+-  left: -10%;
+-  right: -10%;
+-  bottom: -18%;
+-  height: 32%;
+-  border-radius: 50%;
+-  background: linear-gradient(180deg, #ffe7b8, #e7c48a);
+-}
+-
+-.kelp-art {
+-  position: absolute;
+-  bottom: 16%;
+-  width: 14%;
+-  height: 46%;
+-  border-radius: 40% 40% 10% 10%;
+-  background: linear-gradient(180deg, #67d98a, #1f8a52);
+-  transform-origin: bottom center;
+-  animation: kelp-sway 3.4s ease-in-out infinite;
+-}
+-
+-.kelp-art.k1 { left: 8%; }
+-.kelp-art.k2 { right: 10%; animation-delay: -1.2s; }
+-
+-@keyframes kelp-sway {
+-  0%, 100% { transform: rotate(-6deg); }
+-  50% { transform: rotate(7deg); }
+-}
+-
+-.net-hoop {
+-  position: absolute;
+-  right: 8%;
+-  top: 12%;
+-  width: 28%;
+-  aspect-ratio: 1;
+-  border-radius: 50%;
+-  border: 7px solid var(--swatch);
+-  box-shadow: inset 0 0 0 3px rgb(255 255 255 / 45%), 0 0 0 4px color-mix(in srgb, var(--swatch) 35%, transparent);
+-  animation: hoop-bob 3.6s ease-in-out infinite;
+-}
+-
+-.net-hoop.hoop-b { top: auto; bottom: 22%; right: 12%; width: 26%; animation-delay: -1.3s; }
+-
+-.net-bag {
+-  position: absolute;
+-  left: 72%;
+-  top: 18%;
+-  width: 150%;
+-  height: 64%;
+-  background:
+-    repeating-linear-gradient(118deg, transparent 0 5px, color-mix(in srgb, var(--swatch) 80%, white) 5px 6.5px),
+-    repeating-linear-gradient(62deg, transparent 0 5px, color-mix(in srgb, var(--swatch) 70%, white) 5px 6.5px);
+-  clip-path: polygon(0 6%, 100% 30%, 100% 70%, 0 94%);
+-  opacity: 0.55;
+-}
+-
+-@keyframes hoop-bob {
+-  0%, 100% { translate: 0 0; }
+-  50% { translate: 0 -6px; }
+-}
+-
+-.menu-fish {
+-  position: absolute;
+-  left: 16%;
+-  top: 16%;
+-  width: 32%;
+-  height: 20%;
+-  border-radius: 46% 58% 52% 42%;
+-  background:
+-    linear-gradient(180deg, color-mix(in srgb, var(--swatch) 70%, black) 0 28%, var(--swatch) 28% 58%, color-mix(in srgb, var(--swatch) 40%, white) 78%);
+-  animation: fish-swim 3.2s ease-in-out infinite;
+-}
+-
+-.mf-tail {
+-  position: absolute;
+-  left: -18%;
+-  top: 8%;
+-  width: 32%;
+-  height: 84%;
+-  background: var(--swatch);
+-  border-radius: 78% 36% 36% 78%;
+-}
+-
+-.mf-eye {
+-  position: absolute;
+-  right: 16%;
+-  top: 18%;
+-  width: 1.05rem;
+-  height: 1.05rem;
+-  border-radius: 50%;
+-  background:
+-    radial-gradient(circle at 30% 26%, #fff 0 14%, transparent 16%),
+-    radial-gradient(circle at 46% 40%, #fff 0 7%, transparent 9%),
+-    radial-gradient(circle at 58% 58%, #1b1f3b 0 34%, #fff 36% 100%);
+-}
+-
+-.mf-brow {
+-  position: absolute;
+-  right: 13%;
+-  top: 8%;
+-  width: 1.25rem;
+-  height: 0.48rem;
+-  border: 3px solid color-mix(in srgb, var(--swatch) 40%, black);
+-  border-color: color-mix(in srgb, var(--swatch) 40%, black) transparent transparent transparent;
+-  border-radius: 50%;
+-  transform: rotate(-8deg);
+-}
+-
+-.mf-smile {
+-  position: absolute;
+-  right: 8%;
+-  top: 48%;
+-  width: 1.55rem;
+-  height: 0.9rem;
+-  border: 3.5px solid #3a1f2b;
+-  border-color: transparent transparent #3a1f2b transparent;
+-  border-radius: 50%;
+-  opacity: 0.92;
+-}
+-
+-.menu-fish.fish-b {
+-  top: auto;
+-  bottom: 36%;
+-  left: 22%;
+-  animation-delay: -1.4s;
+-}
+-
+-@keyframes fish-swim {
+-  0%, 100% { transform: translateX(0); }
+-  50% { transform: translateX(6%); }
+-}
+-
+-.sea-bub {
+-  position: absolute;
+-  width: 0.7rem;
+-  height: 0.7rem;
+-  border-radius: 50%;
+-  background: radial-gradient(circle at 35% 35%, white, rgb(255 255 255 / 20%) 60%, transparent 62%);
+-  animation: bubble-rise 3s ease-in infinite;
+-}
+-
+-.sb1 { left: 42%; bottom: 10%; }
+-.sb2 { left: 58%; bottom: 18%; width: 0.5rem; height: 0.5rem; animation-delay: -1s; }
+-.sb3 { left: 30%; bottom: 8%; width: 0.4rem; height: 0.4rem; animation-delay: -1.8s; }
+-
+ .grown-hold {
+   position: absolute;
+   z-index: 6;
+-  top: max(12px, env(safe-area-inset-top));
+-  left: max(12px, env(safe-area-inset-left));
++  /* release-1: a little breathing room inside a display cut-out, not flush against it. */
++  top: max(12px, calc(env(safe-area-inset-top, 0px) + 8px));
++  left: max(12px, calc(env(safe-area-inset-left, 0px) + 8px));
+   width: 88px;
+   height: 88px;
+   border: 0;
+@@ -1786,23 +788,6 @@
+   touch-action: none;
+ }
+ 
+-/* Fish only: bottom-right, clear of the left-hand school. Phone landscape is 72px. */
+-.game-root[data-mode="fish"] .grown-hold {
+-  top: auto;
+-  left: auto;
+-  right: max(10px, env(safe-area-inset-right));
+-  bottom: max(10px, env(safe-area-inset-bottom));
+-  width: 88px;
+-  height: 88px;
+-}
+-
+-@media (max-height: 520px) {
+-  .game-root[data-mode="fish"] .grown-hold {
+-    width: 72px;
+-    height: 72px;
+-  }
+-}
+-
+ .grown-glyph {
+   width: 56px;
+   height: 56px;
+@@ -1866,8 +851,6 @@
+   box-shadow: inset 0 0 0 1px rgb(40 48 60 / 16%);
+ }
+ 
+-.grown-span2 { grid-column: span 2; }
+-
+ .fish-palette {
+   display: grid;
+   justify-items: center;
+@@ -1926,8 +909,6 @@
+ 
+ .grown-btn.is-off { opacity: 0.45; }
+ 
+-.grown-wide { grid-column: 1 / -1; }
+-
+ .dot-pips {
+   display: flex;
+   flex-wrap: wrap;
+@@ -1991,361 +972,8 @@
+ }
+ 
+ /* Shape Box menu card. Circle hole and square hole, dipping ball, waiting block. */
+-.sbox {
+-  position: absolute;
+-  left: 14%;
+-  right: 14%;
+-  bottom: 14%;
+-  height: 58%;
+-  border-radius: 18% 18% 16% 16%;
+-  background:
+-    linear-gradient(180deg, #f0c48a 0%, #e8b273 28%, #c98a4b 100%);
+-  box-shadow:
+-    inset 0 -0.45rem 0 rgb(120 62 24 / 18%),
+-    0 0.45rem 0 #a86b32;
+-}
+-
+-.sbox-lid {
+-  position: absolute;
+-  left: -4%;
+-  right: -4%;
+-  top: -18%;
+-  height: 46%;
+-  border-radius: 16% 16% 12% 12%;
+-  background: linear-gradient(180deg, #fff8ec, #fff3df 55%, #f3d7a4);
+-  box-shadow:
+-    inset 0 0 0 3px #e8b273,
+-    0 0.28rem 0 #c98a4b;
+-  transform-origin: center bottom;
+-  transform: rotate(-8deg);
+-}
+-
+-.sbox-hole {
+-  position: absolute;
+-  top: 26%;
+-  width: 30%;
+-  aspect-ratio: 1;
+-  background:
+-    radial-gradient(circle at 50% 42%, #2a1a10 0%, #140c07 72%);
+-  box-shadow:
+-    inset 0 7px 0 #1e130b,
+-    inset 0 -2px 0 #3a2416,
+-    0 0 0 3px #e8b273;
+-}
+-
+-.sbox-hole-round {
+-  left: 12%;
+-  border-radius: 50%;
+-}
+-
+-.sbox-hole-square {
+-  right: 12%;
+-  border-radius: 12%;
+-}
+-
+-.sbox-face {
+-  position: absolute;
+-  left: 28%;
+-  right: 28%;
+-  top: 46%;
+-  height: 28%;
+-}
+-
+-.sbox-face i,
+-.sbox-face b {
+-  position: absolute;
+-}
+-
+-.sbox-face i {
+-  top: 0;
+-  width: 0.55rem;
+-  height: 0.55rem;
+-  border-radius: 50%;
+-  background: #fffdfb;
+-  box-shadow: inset 0.14rem 0.08rem 0 #2a2140;
+-}
+-
+-.sbox-face i:first-child { left: 8%; }
+-.sbox-face i:nth-child(2) { right: 8%; }
+-
+-.sbox-face b {
+-  left: 22%;
+-  right: 22%;
+-  top: 0.7rem;
+-  height: 0.35rem;
+-  border-radius: 0 0 0.5rem 0.5rem;
+-  border: 2px solid #fffdfb;
+-  border-top: 0;
+-}
+-
+-.sbox-ball {
+-  position: absolute;
+-  left: 14%;
+-  top: -2%;
+-  width: 26%;
+-  aspect-ratio: 1;
+-  border-radius: 50%;
+-  background:
+-    radial-gradient(circle at 32% 28%, white 0 12%, transparent 14%),
+-    radial-gradient(circle at 40% 40%, #ff8d8d, #ff4d4d 62%, #d62828);
+-  animation: ball-dip 2s ease-in-out infinite;
+-  z-index: 2;
+-}
+-
+-.sbox-block {
+-  position: absolute;
+-  right: 16%;
+-  bottom: 16%;
+-  width: 20%;
+-  aspect-ratio: 1;
+-  border-radius: 4px;
+-  background:
+-    radial-gradient(circle at 32% 28%, #fff6c4 0 16%, transparent 18%),
+-    linear-gradient(160deg, #ffe991, #ffd23a 55%, #e6b000);
+-  z-index: 3;
+-}
+-
+-@keyframes ball-dip {
+-  0%, 100% { transform: translateY(0); }
+-  45% { transform: translateY(42%); }
+-  62% { transform: translateY(-6%); }
+-}
+-
+-.shape-pips {
+-  display: flex;
+-  gap: 5px;
+-  align-items: center;
+-  justify-content: center;
+-}
+-
+-.shape-pips i {
+-  display: block;
+-  width: 14px;
+-  height: 14px;
+-  background: #c98a4b;
+-  box-shadow: inset 0 0 0 2px #6b4420;
+-}
+-
+-.shape-pips .is-round { border-radius: 50%; }
+-.shape-pips .is-square { border-radius: 3px; }
+-.shape-pips .is-star {
+-  background: #e8b273;
+-  clip-path: polygon(50% 0, 61% 35%, 98% 35%, 68% 57%, 79% 100%, 50% 75%, 21% 100%, 32% 57%, 2% 35%, 39% 35%);
+-  box-shadow: none;
+-}
+-
+-.mix-mark {
+-  display: flex;
+-  gap: 6px;
+-  align-items: center;
+-  justify-content: center;
+-}
+-
+-.mix-toy {
+-  display: block;
+-  width: 16px;
+-  height: 16px;
+-  background: var(--swatch);
+-  box-shadow: inset 0 -2px 0 rgb(0 0 0 / 18%);
+-}
+-
+-.mix-toy.round { border-radius: 50%; }
+-.mix-toy.square { border-radius: 3px; width: 15px; height: 15px; }
+-
+-.mix-mark.rainbow {
+-  display: grid;
+-  grid-template-columns: 12px 12px;
+-  gap: 3px;
+-}
+-
+-.mix-mark.rainbow i {
+-  width: 12px;
+-  height: 12px;
+-  border-radius: 50%;
+-  background: var(--swatch);
+-  box-shadow: inset 0 -1px 0 rgb(0 0 0 / 16%);
+-}
+ 
+ /* Pop Pad menu card: tilted rainbow sheet, a press, then the dome refills. */
+-.pad-wood {
+-  position: absolute;
+-  left: 6%;
+-  right: 6%;
+-  bottom: 7%;
+-  height: 18%;
+-  border-radius: 0.7rem;
+-  background: linear-gradient(180deg, #ffe3c4, #e8bc90 42%, #d7a574);
+-  box-shadow: 0 0.32rem 0 #c48b52;
+-}
+-
+-.pop-sheet {
+-  position: absolute;
+-  left: 8%;
+-  right: 10%;
+-  top: 12%;
+-  bottom: 20%;
+-  display: flex;
+-  flex-direction: column;
+-  justify-content: space-evenly;
+-  gap: 5%;
+-  padding: 7% 6%;
+-  border-radius: 22%;
+-  background: linear-gradient(180deg, #fff 0%, #f7efe4 100%);
+-  box-shadow:
+-    inset 0 0 0 3px rgb(255 255 255 / 55%),
+-    0 0.55rem 0 rgb(90 48 24 / 14%);
+-  transform: perspective(380px) rotateX(18deg) rotateZ(-7deg);
+-  transform-origin: 50% 78%;
+-}
+-
+-.pop-row {
+-  flex: 1 1 0;
+-  min-height: 0;
+-  display: flex;
+-  align-items: center;
+-  justify-content: space-evenly;
+-  border-radius: 999px;
+-  --band: var(--swatch, #ff4d4d);
+-  background: color-mix(in srgb, var(--band) 78%, #5a3018);
+-}
+-
+-.pop-row:nth-child(1) { --band: #ff4d4d; }
+-.pop-row:nth-child(2) { --band: #ff8a2a; }
+-.pop-row:nth-child(3) { --band: #ffd23a; }
+-.pop-row:nth-child(4) { --band: #3dce6e; }
+-
+-.pop-dome {
+-  width: 15%;
+-  aspect-ratio: 1;
+-  border-radius: 50%;
+-  background:
+-    radial-gradient(circle at 34% 28%, #fff 0 14%, transparent 16%),
+-    radial-gradient(circle at 42% 42%, color-mix(in srgb, var(--swatch) 55%, white), var(--swatch) 58%, color-mix(in srgb, var(--swatch) 62%, black));
+-  box-shadow:
+-    0 0.16rem 0 color-mix(in srgb, var(--swatch) 45%, black),
+-    inset 0 -0.12rem 0 rgb(0 0 0 / 12%);
+-}
+-
+-.pop-dome.is-down {
+-  background:
+-    radial-gradient(circle at 50% 62%, rgb(40 18 12 / 55%) 0 22%, transparent 28%),
+-    radial-gradient(circle at 50% 46%, color-mix(in srgb, var(--swatch) 70%, black), var(--swatch));
+-  box-shadow: inset 0 0.22rem 0.12rem rgb(40 16 10 / 45%);
+-  transform: scaleY(0.62);
+-}
+-
+-.pop-dome.is-live {
+-  animation: pop-refill 2s ease-in-out infinite;
+-  z-index: 2;
+-}
+-
+-.pop-finger {
+-  position: absolute;
+-  z-index: 4;
+-  width: 16%;
+-  height: 38%;
+-  left: 58%;
+-  top: 6%;
+-  border-radius: 46% 46% 42% 42%;
+-  background:
+-    radial-gradient(circle at 38% 22%, #fff 0 10%, transparent 12%),
+-    linear-gradient(180deg, #ffe0cc, #f0b090 62%, #e09a78);
+-  box-shadow: inset -0.2rem -0.35rem 0 rgb(176 96 70 / 28%);
+-  transform-origin: 50% 0;
+-  animation: finger-press 2s ease-in-out infinite;
+-}
+-
+-.pop-spark {
+-  position: absolute;
+-  z-index: 5;
+-  width: 0.42rem;
+-  height: 0.42rem;
+-  border-radius: 2px;
+-  background: #fff6c8;
+-  opacity: 0;
+-  animation: pop-spark 2s ease-out infinite;
+-}
+-
+-.pop-spark.s1 { left: 66%; top: 30%; --dx: -12px; --dy: -16px; background: #fff; }
+-.pop-spark.s2 { left: 74%; top: 36%; --dx: 14px; --dy: -10px; background: #ffd23a; animation-delay: 0.04s; }
+-.pop-spark.s3 { left: 68%; top: 44%; --dx: 6px; --dy: 12px; background: #ff8a2a; animation-delay: 0.08s; }
+-
+-@keyframes pop-refill {
+-  0%, 22% {
+-    transform: scale(1);
+-    background:
+-      radial-gradient(circle at 34% 28%, #fff 0 14%, transparent 16%),
+-      radial-gradient(circle at 42% 42%, color-mix(in srgb, var(--swatch) 55%, white), var(--swatch) 58%, color-mix(in srgb, var(--swatch) 62%, black));
+-    box-shadow: 0 0.16rem 0 color-mix(in srgb, var(--swatch) 45%, black);
+-  }
+-  40%, 62% {
+-    transform: scaleY(0.5) translateY(28%);
+-    background:
+-      radial-gradient(circle at 50% 64%, rgb(40 18 12 / 58%) 0 24%, transparent 30%),
+-      radial-gradient(circle at 50% 48%, color-mix(in srgb, var(--swatch) 68%, black), var(--swatch));
+-    box-shadow: inset 0 0.24rem 0.1rem rgb(40 16 10 / 48%);
+-  }
+-  82%, 100% {
+-    transform: scale(1);
+-    background:
+-      radial-gradient(circle at 34% 28%, #fff 0 14%, transparent 16%),
+-      radial-gradient(circle at 42% 42%, color-mix(in srgb, var(--swatch) 55%, white), var(--swatch) 58%, color-mix(in srgb, var(--swatch) 62%, black));
+-    box-shadow: 0 0.16rem 0 color-mix(in srgb, var(--swatch) 45%, black);
+-  }
+-}
+-
+-@keyframes finger-press {
+-  0%, 18% { transform: translate(-8%, -18%) rotate(12deg); }
+-  40%, 62% { transform: translate(2%, 26%) rotate(2deg); }
+-  84%, 100% { transform: translate(-8%, -18%) rotate(12deg); }
+-}
+-
+-@keyframes pop-spark {
+-  0%, 36% { opacity: 0; transform: translate(0, 0) scale(0.3); }
+-  44% { opacity: 1; transform: translate(0, 0) scale(1); }
+-  64%, 100% { opacity: 0; transform: translate(var(--dx), var(--dy)) scale(0.6); }
+-}
+-
+-.pad-grid {
+-  display: grid;
+-  justify-content: center;
+-  align-content: center;
+-}
+-
+-.pad-grid.big {
+-  grid-template-columns: repeat(5, 7px);
+-  gap: 3px;
+-}
+-
+-.pad-grid.med {
+-  grid-template-columns: repeat(6, 5px);
+-  gap: 2px;
+-}
+-
+-.pad-grid i {
+-  display: block;
+-  width: 7px;
+-  height: 7px;
+-  border-radius: 50%;
+-  background: #ff4d4d;
+-  box-shadow:
+-    inset 0 1px 0 rgb(255 255 255 / 70%),
+-    inset 0 -1px 0 rgb(0 0 0 / 22%);
+-}
+-
+-.pad-grid.med i {
+-  width: 5px;
+-  height: 5px;
+-}
+-
+-.pad-grid.big i:nth-child(n + 6):nth-child(-n + 10) { background: #ff8a2a; }
+-.pad-grid.big i:nth-child(n + 11):nth-child(-n + 15) { background: #ffd23a; }
+-.pad-grid.big i:nth-child(n + 16) { background: #3dce6e; }
+-
+-.pad-grid.med i:nth-child(n + 7):nth-child(-n + 12) { background: #ff8a2a; }
+-.pad-grid.med i:nth-child(n + 13):nth-child(-n + 18) { background: #ffd23a; }
+-.pad-grid.med i:nth-child(n + 19):nth-child(-n + 24) { background: #3dce6e; }
+-.pad-grid.med i:nth-child(n + 25) { background: #3b82ff; }
+ 
+ /*
+   Landscape menu: six equal cards in a centred 3 + 3.
+@@ -2609,14 +1237,6 @@
+ .house-menu .home-play::after { display: none; }
+ 
+ /* Pip on the menu wears the house outline. */
+-.house-menu .pip-perch {
+-  filter:
+-    drop-shadow(1.6px 0 0 var(--house-ink))
+-    drop-shadow(-1.6px 0 0 var(--house-ink))
+-    drop-shadow(0 1.6px 0 var(--house-ink))
+-    drop-shadow(0 -1.6px 0 var(--house-ink))
+-    drop-shadow(0 6px 4px rgb(30 44 84 / 22%));
+-}
+ 
+ /* Sparkle burst on press. */
+ .house-sparkle {
+@@ -2698,8 +1318,6 @@
+   .house-strip { animation: none; }
+ }
+ 
+-
+-
+ /* ------------------------------------------------------------------------------------------
+  * Grown-up panel, house style (theme cycle 2). Icon-only, context-sensitive, landscape rows:
+  * row 1 = Home, Sound, Music, Calm, Close; row 2 = the current game's options, headed by that
+@@ -3204,9 +1822,10 @@
+    * set half a row lower), so every crayon is a >=48 px square-ish target with a gap round it,
+    * even at 748x360 (about 51 x 66 px). The tin is only ~25 px wider than the old single column.
+    */
+-  --cray-pad: 4px;
++  --cray-pad: 10px;
+   --cray-gap: 6px;
+   --cray-cw: clamp(49px, 6.6vw, 72px);
++  /* release-1: 10 px clear of the top and bottom edges (and of the chosen crayon's lift). */
+   --cray-h: min(76px, calc((100vh - 2 * var(--cray-pad) - 4 * var(--cray-gap)) / 5));
+   --cray-w: calc(2 * var(--cray-cw) + var(--cray-gap));
+   --side: clamp(92px, 12vw, 170px);
+@@ -3242,11 +1861,32 @@
+   pointer-events: none;
+ }
+ 
+-.colour-pip-bob {
++/* release-1: Pip stands on a little shelf. The shelf stays put; Pip sways from his feet. */
++.colour-perch {
+   position: relative;
+-  width: min(100%, 22vh);
+-  aspect-ratio: 1 / 1.22;
+-  animation: piano-pip-bob 1.3s ease-in-out infinite;
++  width: min(100%, 24vh);
++  aspect-ratio: 1 / 1.3;
++  flex: none;
++}
++.colour-perch .colour-shelf {
++  /* (.colour-perch prefix: beats the generic `.game-root canvas { inset: 0 }`.) */
++  position: absolute;
++  inset: 80% 0 auto 0;
++  width: 100%;
++  height: 20%;
++}
++.colour-pip-bob {
++  position: absolute;
++  left: 0;
++  right: 0;
++  top: 0;
++  bottom: 11%;
++  transform-origin: 50% 100%;
++  animation: colour-pip-sway 1.6s ease-in-out infinite;
++}
++@keyframes colour-pip-sway {
++  0%, 100% { rotate: -3deg; }
++  50% { rotate: 3deg; }
+ }
+ .colour-pip {
+   position: absolute;
+-- 
+2.47.3
+

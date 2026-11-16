@@ -1,0 +1,1351 @@
+From e2d9010b1ed00b0bd035e9b18753dfab20b7997b Mon Sep 17 00:00:00 2001
+From: box <b@x>
+Date: Mon, 16 Nov 2026 01:31:30 +0000
+Subject: [PATCH 3/5] Off-theme fixes: one master Pip (Balloon Pop vehicles at
+ the master's line weight; the painted train borrows the master painter);
+ Shooting Stars gets the navy line with a soft night rim on stars, jar, moon
+ and Pip, painted galaxies instead of photo-like ones, lighter night tint on
+ sleepy Pip; train menu card redrawn; dead Balloon Pop painters and old menu
+ cards removed
+
+---
+ src/game/balloons/scenes.ts | 192 +----------
+ src/game/boot.ts            |   4 +
+ src/game/menu/menuArt.ts    | 659 +++++++++---------------------------
+ src/game/stars/starArt.ts   | 257 ++++++++------
+ 4 files changed, 321 insertions(+), 791 deletions(-)
+
+diff --git a/src/game/balloons/scenes.ts b/src/game/balloons/scenes.ts
+index 9fe155b..9c3b071 100644
+--- a/src/game/balloons/scenes.ts
++++ b/src/game/balloons/scenes.ts
+@@ -215,25 +215,6 @@ export function cel(
+   ctx.restore();
+ }
+ 
+-function wash(ctx: Ctx, w: number, h: number, top: string, mid: string, bottom: string) {
+-  const g = ctx.createLinearGradient(0, 0, 0, h);
+-  g.addColorStop(0, top);
+-  g.addColorStop(0.52, mid);
+-  g.addColorStop(1, bottom);
+-  ctx.fillStyle = g;
+-  ctx.fillRect(0, 0, w, h);
+-}
+-
+-/** Far layers only. Mid and near stay crisp. */
+-function atmosphere(ctx: Ctx, w: number, h: number) {
+-  const g = ctx.createLinearGradient(0, 0, 0, h);
+-  g.addColorStop(0, "rgba(206, 228, 246, 0.2)");
+-  g.addColorStop(0.5, "rgba(206, 228, 246, 0.12)");
+-  g.addColorStop(1, "rgba(206, 228, 246, 0)");
+-  ctx.fillStyle = g;
+-  ctx.fillRect(0, 0, w, h);
+-}
+-
+ export function cloud(ctx: Ctx, x: number, y: number, s: number, ref: number, crisp: boolean) {
+   const puffs: [number, number, number][] = [
+     [0, 0.08, 0.34],
+@@ -408,20 +389,6 @@ export function tree(ctx: Ctx, x: number, base: number, s: number, ref: number,
+   }
+ }
+ 
+-function bush(ctx: Ctx, x: number, y: number, s: number, ref: number) {
+-  contact(ctx, x, y + s * 0.35, s * 0.7, s * 0.16);
+-  const path = () => {
+-    ctx.beginPath();
+-    ctx.moveTo(x + s * 0.55, y);
+-    ctx.arc(x, y, s * 0.55, 0, Math.PI * 2);
+-    ctx.moveTo(x - s * 0.35 + s * 0.42, y + s * 0.12);
+-    ctx.arc(x - s * 0.35, y + s * 0.12, s * 0.42, 0, Math.PI * 2);
+-    ctx.moveTo(x + s * 0.38 + s * 0.4, y + s * 0.1);
+-    ctx.arc(x + s * 0.38, y + s * 0.1, s * 0.4, 0, Math.PI * 2);
+-  };
+-  cel(ctx, ref, path, "#24924a", x - s * 0.2, y - s * 0.25, s * 0.5, 0.003);
+-}
+-
+ /** Rounded bush clump in one green, cel shaded. */
+ export function bushIn(ctx: Ctx, x: number, y: number, s: number, ref: number, color: string) {
+   const path = () => {
+@@ -452,33 +419,6 @@ function bushBorder(ctx: Ctx, w: number, h: number, base: number, viewW: number,
+   }
+ }
+ 
+-/** Cobble path band from `top` to the bottom: rounded stones in warm greys and tans. */
+-function cobbles(ctx: Ctx, w: number, h: number, top: number, viewW: number, seed: number) {
+-  const g = ctx.createLinearGradient(0, h * top, 0, h);
+-  g.addColorStop(0, "#80624a");
+-  g.addColorStop(1, "#73573f");
+-  ctx.fillStyle = g;
+-  ctx.fillRect(0, h * top, w, h * (1 - top));
+-  const rng = mulberry(seed);
+-  const tones = ["#a68a6c", "#9a7f62", "#b09474", "#94795d"];
+-  const rows = 2;
+-  const rowH = (h * (1 - top)) / rows;
+-  const sw = viewW * 0.05;
+-  const n = Math.max(8, Math.round(w / sw));
+-  for (let r = 0; r < rows; r++) {
+-    for (let i = 0; i < n; i++) {
+-      const x = ((i + (r % 2 ? 0.5 : 0) + 0.5) / n) * w + (rng() - 0.5) * sw * 0.15;
+-      const y = h * top + rowH * (r + 0.55);
+-      const rx = (w / n) * (0.4 + rng() * 0.06);
+-      const ry = rowH * (0.38 + rng() * 0.06);
+-      const tone = tones[Math.floor(rng() * tones.length)]!;
+-      stampX(x, w, rx * 1.2, (xx) =>
+-        cel(ctx, viewW, () => ctx.ellipse(xx, y, rx, ry, 0, 0, Math.PI * 2), tone, xx - rx * 0.3, y - ry * 0.35, ry * 0.9, 0.0016),
+-      );
+-    }
+-  }
+-}
+-
+ /**
+  * Near-tile variant being painted (0 = A, 1 = B). Garden and farm paint their
+  * border over a strip two tiles long, so the border only repeats every 2 tiles
+@@ -744,56 +684,15 @@ function organicBorder(ctx: Ctx, w: number, h: number, viewW: number, st: Border
+   }
+ }
+ 
+-/** Grass lip: a wavy green strip whose scalloped edge hangs over the band below. */
+-function grassLip(ctx: Ctx, w: number, h: number, top: number, bottom: number, viewW: number) {
+-  const n = Math.max(12, Math.round(w / (viewW * 0.03)));
+-  const yTop = (t: number) => h * top - Math.sin(t * Math.PI * 2 * 3) * h * 0.006;
+-  const path = () => {
+-    ctx.moveTo(-4, yTop(0));
+-    for (let i = 1; i <= 48; i++) ctx.lineTo((i / 48) * w + (i === 48 ? 4 : 0), yTop(i / 48));
+-    for (let i = n; i >= 0; i--) {
+-      const x0 = (i / n) * w;
+-      const x1 = ((i - 0.5) / n) * w;
+-      const dip = h * bottom + (i % 2 ? h * 0.012 : 0);
+-      ctx.lineTo(x0, h * bottom - h * 0.01);
+-      ctx.quadraticCurveTo(x1 + (w / n) * 0.25, dip + h * 0.016, x1, h * bottom - h * 0.01);
+-    }
+-    ctx.closePath();
+-  };
+-  ctx.beginPath();
+-  path();
+-  ctx.strokeStyle = INK;
+-  ctx.lineWidth = Math.max(3, viewW * 0.0032) * 2;
+-  ctx.lineJoin = "round";
+-  ctx.stroke();
+-  const g = ctx.createLinearGradient(0, h * top, 0, h * bottom);
+-  g.addColorStop(0, "#5ccf4e");
+-  g.addColorStop(1, "#2f9e3e");
+-  ctx.beginPath();
+-  path();
+-  ctx.fillStyle = g;
+-  ctx.fill();
+-  // Grass blade ticks along the lip.
+-  ctx.strokeStyle = "#2a8a38";
+-  ctx.lineWidth = Math.max(2, viewW * 0.0024);
+-  ctx.lineCap = "round";
+-  const rng = mulberry(41);
+-  ctx.beginPath();
+-  for (let i = 0; i < n * 2; i++) {
+-    const x = ((i + 0.5) / (n * 2)) * w;
+-    const y = h * (top + (bottom - top) * (0.35 + rng() * 0.4));
+-    ctx.moveTo(x, y + h * 0.012);
+-    ctx.lineTo(x + viewW * 0.003, y - h * 0.004);
+-  }
+-  ctx.stroke();
+-}
+-
+-function pip(ctx: Ctx, x: number, y: number, r: number, ref: number, squash = 1) {
++function pip(ctx: Ctx, x: number, y: number, r: number, _ref: number, squash = 1) {
++  // release-1: paint at the master Pip's own scale (house/pip.ts: head r 58 px, ref 58 / 0.195)
++  // and scale to size, so the navy outline has the same weight as on the menu, Colouring and Piano.
++  const R0 = 58;
++  const k = r / R0;
+   ctx.save();
+   ctx.translate(x, y);
+-  ctx.scale(1, squash);
+-  ctx.translate(-x, -y);
+-  pipFace(ctx, x, y, r, ref);
++  ctx.scale(k, k * squash);
++  pipFace(ctx, 0, 0, R0, R0 / 0.195);
+   ctx.restore();
+ }
+ 
+@@ -1085,72 +984,6 @@ function soil(ctx: Ctx, w: number, h: number, top: number, bottom: number) {
+   ctx.stroke();
+ }
+ 
+-function frontGrass(ctx: Ctx, w: number, h: number, top: number, ref: number) {
+-  const yOf = (t: number) => h * top - Math.sin(t * Math.PI * 2) * h * 0.018;
+-  ctx.beginPath();
+-  ctx.moveTo(0, h);
+-  ctx.lineTo(0, yOf(0));
+-  const n = 12;
+-  for (let i = 1; i <= n; i++) {
+-    const t0 = (i - 1) / n;
+-    const t1 = i / n;
+-    ctx.quadraticCurveTo(((t0 + t1) / 2) * w, yOf((t0 + t1) / 2) - h * 0.012, t1 * w, yOf(t1));
+-  }
+-  ctx.lineTo(w, h);
+-  ctx.closePath();
+-  const g = ctx.createLinearGradient(0, h * (top - 0.02), 0, h);
+-  g.addColorStop(0, "#3cba62");
+-  g.addColorStop(1, "#24a048");
+-  ctx.fillStyle = g;
+-  ctx.fill();
+-  strokeCrest(ctx, w, yOf, ref, 0.0035);
+-}
+-
+-function flowerPot(ctx: Ctx, x: number, y: number, s: number, ref: number) {
+-  contact(ctx, x, y + s * 0.85, s * 0.7, s * 0.16);
+-  cel(
+-    ctx,
+-    ref,
+-    () => {
+-      ctx.moveTo(x - s * 0.42, y);
+-      ctx.lineTo(x - s * 0.32, y + s * 0.7);
+-      ctx.lineTo(x + s * 0.32, y + s * 0.7);
+-      ctx.lineTo(x + s * 0.42, y);
+-      ctx.closePath();
+-    },
+-    "#e07040",
+-    x - s * 0.15,
+-    y + s * 0.15,
+-    s * 0.4,
+-    0.003,
+-  );
+-  cel(
+-    ctx,
+-    ref,
+-    () => ctx.ellipse(x, y, s * 0.5, s * 0.14, 0, 0, Math.PI * 2),
+-    "#f09058",
+-    x - s * 0.15,
+-    y - s * 0.04,
+-    s * 0.3,
+-    0.0025,
+-  );
+-  ctx.beginPath();
+-  ctx.ellipse(x, y + s * 0.02, s * 0.32, s * 0.08, 0, 0, Math.PI * 2);
+-  ctx.fillStyle = "#6b3f22";
+-  ctx.fill();
+-  ctx.strokeStyle = "#1f8a3c";
+-  ctx.lineWidth = Math.max(2, s * 0.06);
+-  ctx.beginPath();
+-  ctx.moveTo(x, y);
+-  ctx.quadraticCurveTo(x - s * 0.1, y - s * 0.35, x - s * 0.28, y - s * 0.45);
+-  ctx.moveTo(x, y);
+-  ctx.quadraticCurveTo(x + s * 0.12, y - s * 0.4, x + s * 0.3, y - s * 0.5);
+-  ctx.stroke();
+-  flower(ctx, x - s * 0.2, y - s * 0.5, s * 0.22, "#ff4d93", ref);
+-  flower(ctx, x + s * 0.22, y - s * 0.55, s * 0.2, "#ffd000", ref);
+-  flower(ctx, x, y - s * 0.62, s * 0.18, "#ff7810", ref);
+-}
+-
+ function paintGarden(which: LayerName, ctx: Ctx, w: number, h: number, viewW: number) {
+   if (which === "far") {
+     skyWash(ctx, w, h);
+@@ -1446,17 +1279,6 @@ function fishlet(ctx: Ctx, x: number, y: number, s: number, color: string, flip:
+   ctx.fill();
+ }
+ 
+-function reefMound(ctx: Ctx, x: number, y: number, s: number, color: string) {
+-  ctx.fillStyle = color;
+-  ctx.beginPath();
+-  ctx.moveTo(x - s, y + s * 0.45);
+-  ctx.quadraticCurveTo(x - s * 0.7, y - s * 0.2, x - s * 0.2, y - s * 0.55);
+-  ctx.quadraticCurveTo(x, y - s * 0.15, x + s * 0.35, y - s * 0.7);
+-  ctx.quadraticCurveTo(x + s * 0.7, y - s * 0.1, x + s, y + s * 0.5);
+-  ctx.closePath();
+-  ctx.fill();
+-}
+-
+ function kelp(ctx: Ctx, x: number, y: number, h: number, ref: number, color: string) {
+   ctx.strokeStyle = color;
+   ctx.lineWidth = Math.max(7, ref * 0.012);
+diff --git a/src/game/boot.ts b/src/game/boot.ts
+index 27f5a52..824742d 100644
+--- a/src/game/boot.ts
++++ b/src/game/boot.ts
+@@ -2,6 +2,10 @@ import { vehicleWorldBox, zoom } from "./balloons/runtime";
+ import { audio } from "./audio";
+ import { sim } from "./sim";
+ import { PIANO_VOICES, playKey, type PianoVoice } from "./piano/pianoSynth";
++import { paintHousePip } from "./house/pip";
++
++// release-1: the painted train (c12) draws Pip with the same master painter as the menu.
++if (typeof window !== "undefined") (window as unknown as { __housePip?: typeof paintHousePip }).__housePip = paintHousePip;
+ 
+ /** Read once. URL flags apply only in dev or when ?test=1 is set. */
+ export function applyBoot(): number | [number, number] {
+diff --git a/src/game/menu/menuArt.ts b/src/game/menu/menuArt.ts
+index 94865cd..c7e1276 100644
+--- a/src/game/menu/menuArt.ts
++++ b/src/game/menu/menuArt.ts
+@@ -6,7 +6,6 @@
+ import type { ColorId } from "../theme";
+ import {
+   blush,
+-  bushIn,
+   cel,
+   celEllipse,
+   celRoundRect,
+@@ -76,65 +75,189 @@ function hill(ctx: Ctx, w: number, h: number, crest: number, amp: number, phase:
+   return yOf;
+ }
+ 
+-function bubble(ctx: Ctx, x: number, y: number, r: number) {
++/* ------------------------------------------------------------- Colour sorting (train) */
++
++// release-1: the train card, redrawn. A big smiling engine with a steam puff pulls three wagons
++// (red, yellow, blue) carrying an apple, a banana and a duck, along sleepers and rails, in front of
++// layered hills. The wheels are the in-game spoked wheels.
++
++/** In-game style wheel: navy tyre, slate disc, four spokes, yellow hub. */
++function trainWheel(ctx: Ctx, x: number, y: number, r: number, ref: number) {
+   ctx.beginPath();
+   ctx.arc(x, y, r, 0, Math.PI * 2);
+-  ctx.fillStyle = "rgba(255,255,255,0.28)";
++  ctx.fillStyle = SCENE_INK;
+   ctx.fill();
+-  ctx.lineWidth = Math.max(1.5, r * 0.22);
+-  ctx.strokeStyle = "rgba(255,255,255,0.95)";
++  ctx.beginPath();
++  ctx.arc(x, y, r * 0.72, 0, Math.PI * 2);
++  ctx.fillStyle = "#5b6f9c";
++  ctx.fill();
++  ctx.strokeStyle = SCENE_INK;
++  ctx.lineWidth = Math.max(2, r * 0.16);
++  ctx.lineCap = "round";
++  ctx.beginPath();
++  for (let i = 0; i < 4; i++) {
++    const a = 0.4 + (i * Math.PI) / 2;
++    ctx.moveTo(x, y);
++    ctx.lineTo(x + Math.cos(a) * r * 0.7, y + Math.sin(a) * r * 0.7);
++  }
+   ctx.stroke();
++  celEllipse(ctx, ref, x, y, r * 0.3, r * 0.3, PUNCH.yellow.base, 0.003);
++}
++
++function steamPuff(ctx: Ctx, x: number, y: number, s: number, ref: number) {
++  const path = () => {
++    for (const [ox, oy, r] of [[0, 0, 0.5], [-0.42, 0.18, 0.36], [0.44, 0.12, 0.38], [0.1, -0.36, 0.34]] as const) {
++      ctx.moveTo(x + s * ox + s * r, y + s * oy);
++      ctx.arc(x + s * ox, y + s * oy, s * r, 0, Math.PI * 2);
++    }
++  };
++  cel(ctx, ref, path, "#f6f9ff", x - s * 0.2, y - s * 0.2, s * 0.5, 0.003);
++}
++
++function cardApple(ctx: Ctx, x: number, y: number, s: number, ref: number) {
++  ctx.beginPath();
++  ctx.moveTo(x, y - s * 0.42);
++  ctx.quadraticCurveTo(x + s * 0.04, y - s * 0.62, x + s * 0.12, y - s * 0.7);
++  ink(ctx, Math.max(2.4, s * 0.09));
++  cel(ctx, ref, () => ctx.ellipse(x + s * 0.2, y - s * 0.6, s * 0.18, s * 0.09, -0.5, 0, Math.PI * 2), PUNCH.green.base, x + s * 0.16, y - s * 0.63, s * 0.1, 0.003);
++  cel(
++    ctx,
++    ref,
++    () => {
++      ctx.moveTo(x, y - s * 0.36);
++      ctx.bezierCurveTo(x + s * 0.5, y - s * 0.62, x + s * 0.62, y + s * 0.1, x + s * 0.2, y + s * 0.42);
++      ctx.quadraticCurveTo(x, y + s * 0.5, x - s * 0.2, y + s * 0.42);
++      ctx.bezierCurveTo(x - s * 0.62, y + s * 0.1, x - s * 0.5, y - s * 0.62, x, y - s * 0.36);
++      ctx.closePath();
++    },
++    PUNCH.red.base,
++    x - s * 0.2,
++    y - s * 0.12,
++    s * 0.32,
++    0.003,
++  );
++}
++
++function cardBanana(ctx: Ctx, x: number, y: number, s: number, ref: number) {
++  cel(
++    ctx,
++    ref,
++    () => {
++      ctx.moveTo(x - s * 0.55, y - s * 0.18);
++      ctx.quadraticCurveTo(x - s * 0.1, y + s * 0.5, x + s * 0.55, y - s * 0.22);
++      ctx.quadraticCurveTo(x + s * 0.5, y + s * 0.06, x + s * 0.3, y + s * 0.2);
++      ctx.quadraticCurveTo(x - s * 0.1, y + s * 0.42, x - s * 0.5, y + s * 0.02);
++      ctx.closePath();
++    },
++    "#ffd84a",
++    x - s * 0.1,
++    y + s * 0.1,
++    s * 0.3,
++    0.003,
++  );
+   ctx.beginPath();
+-  ctx.arc(x - r * 0.35, y - r * 0.35, r * 0.25, 0, Math.PI * 2);
+-  ctx.fillStyle = "#ffffff";
++  ctx.arc(x + s * 0.55, y - s * 0.22, s * 0.06, 0, Math.PI * 2);
++  ctx.fillStyle = "#7a4a1e";
+   ctx.fill();
+ }
+ 
+-/* ------------------------------------------------------------- Colour sorting (train) */
++function cardDuck(ctx: Ctx, x: number, y: number, s: number, ref: number) {
++  // Body, head, beak, eye: a little yellow toy duck.
++  celEllipse(ctx, ref, x, y + s * 0.12, s * 0.5, s * 0.3, PUNCH.yellow.base, 0.003);
++  celEllipse(ctx, ref, x + s * 0.22, y - s * 0.22, s * 0.24, s * 0.24, PUNCH.yellow.base, 0.003);
++  cel(
++    ctx,
++    ref,
++    () => {
++      ctx.moveTo(x + s * 0.42, y - s * 0.26);
++      ctx.quadraticCurveTo(x + s * 0.66, y - s * 0.22, x + s * 0.6, y - s * 0.12);
++      ctx.quadraticCurveTo(x + s * 0.5, y - s * 0.12, x + s * 0.42, y - s * 0.16);
++      ctx.closePath();
++    },
++    PUNCH.orange.base,
++    x + s * 0.5,
++    y - s * 0.22,
++    s * 0.08,
++    0.003,
++  );
++  ctx.beginPath();
++  ctx.arc(x + s * 0.28, y - s * 0.28, s * 0.05, 0, Math.PI * 2);
++  ctx.fillStyle = SCENE_INK;
++  ctx.fill();
++}
+ 
+-// The colour-sorting card shows the train game (0.12.8): a smiling engine pulling three wagons,
+-// one per colour, along a track.
+ export function paintPotsCard(ctx: Ctx, w: number, h: number) {
+   skyWash(ctx, w, h);
+-  cloud(ctx, w * 0.18, h * 0.16, w * 0.22, w, true);
+-  cloud(ctx, w * 0.82, h * 0.12, w * 0.18, w, true);
+-  hill(ctx, w, h, 0.72, 0.04, 0.3, SCENERY.grassLight, SCENERY.grassDark);
+-  // Two rails.
+-  const rail = h * 0.88;
++  // Sun with a soft glow, one cloud.
++  const sun = ctx.createRadialGradient(w * 0.86, h * 0.14, 0, w * 0.86, h * 0.14, w * 0.2);
++  sun.addColorStop(0, "rgba(255, 244, 186, 0.95)");
++  sun.addColorStop(1, "rgba(255, 244, 186, 0)");
++  ctx.fillStyle = sun;
++  ctx.fillRect(0, 0, w, h);
++  celEllipse(ctx, w, w * 0.86, h * 0.14, w * 0.07, w * 0.07, "#ffe066", W * 0.8);
++  cloud(ctx, w * 0.56, h * 0.13, w * 0.18, w, true);
++  // Layered hills: far, then near.
++  hill(ctx, w, h, 0.5, 0.06, 0.9, "#d8f2a8", "#b8e48a");
++  hill(ctx, w, h, 0.64, 0.05, 2.2, SCENERY.grassLight, SCENERY.grassDark);
++  // Sleepers and rails, right across the card.
++  const rail = h * 0.85;
++  const sl = w * 0.07;
++  for (let x = -sl * 0.3; x < w; x += sl) celRoundRect(ctx, w, x, rail - h * 0.015, sl * 0.55, h * 0.07, 2, "#c47a3a", 0.003);
+   ctx.strokeStyle = SCENE_INK;
+   ctx.lineWidth = Math.max(3, w * W);
+   ctx.lineCap = "round";
+   ctx.beginPath();
+-  ctx.moveTo(w * 0.02, rail);
+-  ctx.lineTo(w * 0.98, rail);
+-  ctx.moveTo(w * 0.02, rail + h * 0.05);
+-  ctx.lineTo(w * 0.98, rail + h * 0.05);
++  ctx.moveTo(-4, rail);
++  ctx.lineTo(w + 4, rail);
++  ctx.moveTo(-4, rail + h * 0.045);
++  ctx.lineTo(w + 4, rail + h * 0.045);
+   ctx.stroke();
+-  // Engine: yellow body, blue cab and chimney, two wheels, a smile.
+-  const ew = w * 0.26;
+-  const axle = h * 0.78;
+-  const body = punch("yellow");
+-  const cab = punch("blue");
+-  cel(ctx, w, () => ctx.roundRect(w * 0.04, axle - ew * 0.62, ew * 0.7, ew * 0.58, ew * 0.2), body.base, w * 0.08, axle - ew * 0.4, ew * 0.35, W);
+-  cel(ctx, w, () => ctx.roundRect(w * 0.2, axle - ew * 0.86, ew * 0.38, ew * 0.8, 7), cab.base, w * 0.26, axle - ew * 0.5, ew * 0.28, W);
+-  cel(ctx, w, () => ctx.roundRect(w * 0.12, axle - ew * 1.02, ew * 0.16, ew * 0.26, 3), cab.base, w * 0.14, axle - ew * 0.9, ew * 0.14, W);
+-  celEllipse(ctx, w, w * 0.1, axle, ew * 0.14, ew * 0.14, SCENE_INK, W);
+-  celEllipse(ctx, w, w * 0.26, axle, ew * 0.14, ew * 0.14, SCENE_INK, W);
+-  face(ctx, w * 0.14, axle - ew * 0.34, ew * 0.3, "smile");
+-  // Three wagons, one per colour.
+-  const wagons: ColorId[] = ["red", "yellow", "blue"];
+-  wagons.forEach((c, i) => {
+-    const cx = w * (0.42 + i * 0.2);
+-    const cw = w * 0.175;
+-    const top = axle - cw * 0.82;
++  contact(ctx, w * 0.5, rail + h * 0.02, w * 0.48, h * 0.03);
++
++  // Engine (left, facing left): yellow boiler with the face, red cab, blue chimney, steam.
++  const axle = rail - h * 0.035;
++  const wr = h * 0.075;
++  const ex0 = w * 0.03;
++  const ew = w * 0.36;
++  const yellow = punch("yellow");
++  const red = punch("red");
++  const blue = punch("blue");
++  steamPuff(ctx, ex0 + ew * 0.24, axle - h * 0.56, w * 0.07, w);
++  steamPuff(ctx, ex0 + ew * 0.42, axle - h * 0.68, w * 0.05, w);
++  cel(ctx, w, () => ctx.roundRect(ex0 + ew * 0.16, axle - h * 0.48, ew * 0.16, h * 0.16, 4), blue.base, ex0 + ew * 0.2, axle - h * 0.44, ew * 0.08, W);
++  cel(ctx, w, () => ctx.roundRect(ex0 + ew * 0.58, axle - h * 0.52, ew * 0.4, h * 0.46, ew * 0.08), red.base, ex0 + ew * 0.66, axle - h * 0.42, ew * 0.18, W);
++  celRoundRect(ctx, w, ex0 + ew * 0.66, axle - h * 0.45, ew * 0.24, h * 0.13, ew * 0.04, "#cfefff", 0.003);
++  cel(ctx, w, () => ctx.roundRect(ex0, axle - h * 0.36, ew * 0.66, h * 0.3, h * 0.1), yellow.base, ex0 + ew * 0.16, axle - h * 0.28, ew * 0.24, W);
++  face(ctx, ex0 + ew * 0.3, axle - h * 0.215, h * 0.2, "smile");
++  trainWheel(ctx, ex0 + ew * 0.2, axle, wr, w);
++  trainWheel(ctx, ex0 + ew * 0.78, axle, wr * 1.1, w);
++
++  // Three wagons with cargo, coupled.
++  const cw = w * 0.17;
++  const gap = w * 0.015;
++  const cargo: ((x: number, y: number, s: number) => void)[] = [
++    (x, y, s) => cardApple(ctx, x, y, s, w),
++    (x, y, s) => cardBanana(ctx, x, y, s, w),
++    (x, y, s) => cardDuck(ctx, x, y, s, w),
++  ];
++  (["red", "yellow", "blue"] as const).forEach((c, i) => {
++    const x0 = ex0 + ew + gap + i * (cw + gap);
++    const cx = x0 + cw / 2;
++    const top = axle - h * 0.24;
++    ctx.strokeStyle = SCENE_INK;
++    ctx.lineWidth = Math.max(3, w * W);
++    ctx.beginPath();
++    ctx.moveTo(x0 - gap - 2, axle - h * 0.07);
++    ctx.lineTo(x0 + 2, axle - h * 0.07);
++    ctx.stroke();
++    cargo[i]!(cx, top - h * 0.06, cw * 0.6);
+     const p = punch(c);
+-    cel(ctx, w, () => ctx.roundRect(cx - cw * 0.5, top, cw, cw * 0.82, 6), p.base, cx - cw * 0.2, top + cw * 0.3, cw * 0.5, W);
+-    celEllipse(ctx, w, cx - cw * 0.28, axle, cw * 0.14, cw * 0.14, SCENE_INK, W);
+-    celEllipse(ctx, w, cx + cw * 0.28, axle, cw * 0.14, cw * 0.14, SCENE_INK, W);
+-    face(ctx, cx, top + cw * 0.48, cw * 0.48, i === 1 ? "wink" : "smile");
++    cel(ctx, w, () => ctx.roundRect(x0, top, cw, h * 0.2, cw * 0.14), p.base, x0 + cw * 0.3, top + h * 0.06, cw * 0.3, W);
++    trainWheel(ctx, x0 + cw * 0.26, axle, wr * 0.86, w);
++    trainWheel(ctx, x0 + cw * 0.74, axle, wr * 0.86, w);
+   });
+-  sparkle(ctx, w * 0.3, h * 0.18, w * 0.04, "#ffffff");
+-  sparkle(ctx, w * 0.08, h * 0.28, w * 0.03, "#fff6b0");
++  sparkle(ctx, w * 0.36, h * 0.3, w * 0.03, "#ffffff");
++  sparkle(ctx, w * 0.72, h * 0.32, w * 0.026, "#fff6b0");
+ }
+ 
+ /* ------------------------------------------------------------- Balloon Pop */
+@@ -176,455 +299,3 @@ export function paintBalloonsCard(ctx: Ctx, w: number, h: number) {
+   sparkle(ctx, w * 0.67, h * 0.42, w * 0.03, "#fff6b0");
+ }
+ 
+-/* ------------------------------------------------------------- Bubbles */
+-
+-/** Bubbles card, matching the game: night sky, three tall glass tubes stacked with coloured
+- *  bubbles on a wooden shelf, and the red, yellow and blue orbs along the bottom. */
+-export function paintBubblesCard(ctx: Ctx, w: number, h: number) {
+-  const g = ctx.createLinearGradient(0, 0, 0, h);
+-  g.addColorStop(0, "#2a1450");
+-  g.addColorStop(0.6, "#3b1d6b");
+-  g.addColorStop(1, "#4a2a7a");
+-  ctx.fillStyle = g;
+-  ctx.fillRect(0, 0, w, h);
+-  // Stars.
+-  let seed = 7;
+-  const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+-  ctx.fillStyle = "rgba(255,255,255,0.85)";
+-  for (let i = 0; i < 26; i++) {
+-    ctx.beginPath();
+-    ctx.arc(rnd() * w, rnd() * h * 0.62, w * (0.004 + rnd() * 0.006), 0, Math.PI * 2);
+-    ctx.fill();
+-  }
+-  sparkle(ctx, w * 0.1, h * 0.14, w * 0.035, "#fff6b0");
+-  sparkle(ctx, w * 0.9, h * 0.3, w * 0.03, "#ffffff");
+-  // Wooden shelf.
+-  const shelfY = h * 0.6;
+-  celRoundRect(ctx, w, w * 0.06, shelfY, w * 0.88, h * 0.06, w * 0.02, "#c9773a", W);
+-  // Tubes.
+-  const tubes: ColorId[] = ["red", "yellow", "blue"];
+-  const tw = w * 0.17;
+-  tubes.forEach((c, i) => {
+-    const cx = w * (0.25 + i * 0.25);
+-    const top = h * 0.07;
+-    const bot = shelfY + h * 0.01;
+-    const p = punch(c);
+-    const glass = () => ctx.roundRect(cx - tw / 2, top, tw, bot - top, [tw * 0.5, tw * 0.5, tw * 0.22, tw * 0.22]);
+-    ctx.beginPath();
+-    glass();
+-    ink(ctx, Math.max(3, w * W) * 2);
+-    ctx.beginPath();
+-    glass();
+-    ctx.fillStyle = "rgba(200, 190, 255, 0.22)";
+-    ctx.fill();
+-    // Stacked bubbles.
+-    ctx.save();
+-    ctx.beginPath();
+-    glass();
+-    ctx.clip();
+-    let srand = 11 + i * 5;
+-    const r2 = () => ((srand = (srand * 16807) % 2147483647) / 2147483647);
+-    for (let k = 0; k < 22; k++) {
+-      const by = bot - (k / 22) * (bot - top) * 0.92 - tw * 0.12;
+-      const bx = cx + (r2() - 0.5) * tw * 0.55;
+-      const br = tw * (0.12 + r2() * 0.1);
+-      const bg = ctx.createRadialGradient(bx - br * 0.35, by - br * 0.35, br * 0.1, bx, by, br);
+-      bg.addColorStop(0, p.light);
+-      bg.addColorStop(0.55, p.base);
+-      bg.addColorStop(1, p.dark);
+-      ctx.beginPath();
+-      ctx.arc(bx, by, br, 0, Math.PI * 2);
+-      ctx.fillStyle = bg;
+-      ctx.fill();
+-    }
+-    ctx.fillStyle = "rgba(255,255,255,0.55)";
+-    ctx.beginPath();
+-    ctx.roundRect(cx - tw * 0.34, top + tw * 0.4, tw * 0.12, (bot - top) * 0.62, tw * 0.06);
+-    ctx.fill();
+-    ctx.restore();
+-    // Little wooden cup each tube stands in.
+-    celRoundRect(ctx, w, cx - tw * 0.62, bot - h * 0.025, tw * 1.24, h * 0.05, w * 0.012, "#a85a28", W);
+-  });
+-  // Table and the three orbs.
+-  const tableY = h * 0.8;
+-  ctx.beginPath();
+-  ctx.moveTo(0, tableY);
+-  ctx.lineTo(w, tableY);
+-  ctx.lineTo(w, h);
+-  ctx.lineTo(0, h);
+-  ctx.closePath();
+-  const tg = ctx.createLinearGradient(0, tableY, 0, h);
+-  tg.addColorStop(0, "#b86a32");
+-  tg.addColorStop(1, "#7e3f1c");
+-  ctx.fillStyle = tg;
+-  ctx.fill();
+-  ctx.beginPath();
+-  ctx.moveTo(0, tableY);
+-  ctx.lineTo(w, tableY);
+-  ink(ctx, Math.max(3, w * W) * 1.6);
+-  tubes.forEach((c, i) => {
+-    const ox = w * (0.2 + i * 0.3);
+-    const oy = h * 0.8;
+-    const r = w * 0.115;
+-    contact(ctx, ox, oy + r * 0.92, r * 0.85, r * 0.16);
+-    celEllipse(ctx, w, ox, oy, r, r, punch(c).base, W);
+-    face(ctx, ox, oy + r * 0.1, r * 0.78, i === 1 ? "wink" : "smile");
+-  });
+-}
+-
+-/* ------------------------------------------------------------- Fish Nets */
+-
+-function fishShape(ctx: Ctx, x: number, y: number, s: number, color: ColorId, flip = 1) {
+-  const p = punch(color);
+-  ctx.save();
+-  ctx.translate(x, y);
+-  ctx.scale(flip, 1);
+-  // Tail.
+-  cel(
+-    ctx,
+-    s * 6,
+-    () => {
+-      ctx.moveTo(-s * 0.7, 0);
+-      ctx.quadraticCurveTo(-s * 1.15, -s * 0.55, -s * 1.25, -s * 0.5);
+-      ctx.quadraticCurveTo(-s * 1.05, 0, -s * 1.25, s * 0.5);
+-      ctx.quadraticCurveTo(-s * 1.15, s * 0.55, -s * 0.7, 0);
+-      ctx.closePath();
+-    },
+-    p.dark,
+-    -s,
+-    -s * 0.2,
+-    s * 0.4,
+-    0.009,
+-  );
+-  // Body.
+-  cel(ctx, s * 6, () => ctx.ellipse(0, 0, s * 0.85, s * 0.62, 0, 0, Math.PI * 2), p.base, -s * 0.3, -s * 0.3, s * 0.7, 0.009);
+-  // Fin.
+-  cel(
+-    ctx,
+-    s * 6,
+-    () => {
+-      ctx.moveTo(-s * 0.25, -s * 0.55);
+-      ctx.quadraticCurveTo(0, -s * 1.0, s * 0.3, -s * 0.58);
+-      ctx.closePath();
+-    },
+-    p.dark,
+-    0,
+-    -s * 0.7,
+-    s * 0.3,
+-    0.009,
+-  );
+-  // Belly light.
+-  ctx.save();
+-  ctx.beginPath();
+-  ctx.ellipse(0, 0, s * 0.85, s * 0.62, 0, 0, Math.PI * 2);
+-  ctx.clip();
+-  ctx.fillStyle = "rgba(255,255,255,0.32)";
+-  ctx.beginPath();
+-  ctx.ellipse(s * 0.05, s * 0.42, s * 0.6, s * 0.25, 0, 0, Math.PI * 2);
+-  ctx.fill();
+-  ctx.restore();
+-  // Face (eye forward, smile).
+-  eye(ctx, s * 0.36, -s * 0.12, s * 0.22);
+-  ctx.fillStyle = "rgba(255, 105, 145, 0.78)";
+-  ctx.beginPath();
+-  ctx.ellipse(s * 0.32, s * 0.2, s * 0.13, s * 0.07, 0, 0, Math.PI * 2);
+-  ctx.fill();
+-  ctx.beginPath();
+-  ctx.arc(s * 0.56, s * 0.12, s * 0.14, 0.2, Math.PI * 0.9);
+-  ctx.strokeStyle = SCENE_INK;
+-  ctx.lineWidth = Math.max(2, s * 0.08);
+-  ctx.lineCap = "round";
+-  ctx.stroke();
+-  ctx.restore();
+-}
+-
+-/**
+- * A dip net, read at a glance: a long wooden handle, a round hoop seen from slightly above,
+- * and a sagging mesh bag hanging under it. Frame is warm yellow (never a lone red ring).
+- */
+-/**
+- * Fish Nets card net (Lochlans R2): an orange hoop seen in perspective (a wide, low ellipse,
+- * ~33° view) tilted so its opening faces down-left toward the fish; a thin ring, a short handle,
+- * and the mesh bag trailing behind it up-right. A fish of the net's colour swims half inside.
+- * Draw order: bag fill, back rim, fish, mesh over the bagged part, front rim, handle.
+- */
+-function netHoop(ctx: Ctx, x: number, y: number, r: number, color: ColorId, ref: number) {
+-  const line = Math.max(3, ref * W);
+-  const rx = r;
+-  const ry = r * 0.5;
+-  const tilt = (25 * Math.PI) / 180;
+-  const ringW = ref * 0.036;
+-  const frame = PUNCH.orange;
+-  const bagEdge = () => {
+-    ctx.moveTo(-rx, 0);
+-    ctx.bezierCurveTo(-rx * 1.02, -r * 0.85, -r * 0.35, -r * 1.75, r * 0.3, -r * 1.7);
+-    ctx.bezierCurveTo(r * 0.85, -r * 1.62, rx * 1.04, -r * 0.8, rx, 0);
+-  };
+-  const bag = () => {
+-    ctx.beginPath();
+-    bagEdge();
+-    ctx.ellipse(0, 0, rx, ry, 0, 0, Math.PI, true);
+-    ctx.closePath();
+-  };
+-  ctx.save();
+-  ctx.translate(x, y);
+-  ctx.rotate(tilt);
+-  // Bag fill.
+-  bag();
+-  ctx.fillStyle = "rgba(235, 250, 255, 0.34)";
+-  ctx.fill();
+-  // Back rim (far half of the hoop).
+-  ctx.beginPath();
+-  ctx.ellipse(0, 0, rx, ry, 0, Math.PI, Math.PI * 2);
+-  ink(ctx, ringW + line * 2);
+-  ctx.beginPath();
+-  ctx.ellipse(0, 0, rx, ry, 0, Math.PI, Math.PI * 2);
+-  ctx.strokeStyle = frame.dark;
+-  ctx.lineWidth = ringW;
+-  ctx.stroke();
+-  ctx.restore();
+-
+-  // The fish, nose into the hoop, half inside.
+-  const s = r * 0.62;
+-  const fc = { x: x - r * 0.62, y: y + r * 0.42 };
+-  ctx.save();
+-  ctx.translate(fc.x, fc.y);
+-  ctx.rotate(-0.38);
+-  fishShape(ctx, 0, 0, s, color);
+-  ctx.restore();
+-
+-  ctx.save();
+-  ctx.translate(x, y);
+-  ctx.rotate(tilt);
+-  // Mesh over everything inside the bag (the bagged half of the fish shows through it).
+-  ctx.save();
+-  bag();
+-  ctx.clip();
+-  ctx.strokeStyle = "rgba(255,255,255,0.92)";
+-  ctx.lineWidth = Math.max(1.3, r * 0.045);
+-  const step = r * 0.32;
+-  for (let i = -12; i <= 12; i++) {
+-    ctx.beginPath();
+-    ctx.moveTo(i * step - r * 2, -r * 2.2);
+-    ctx.lineTo(i * step + r * 2, r * 0.8);
+-    ctx.moveTo(i * step + r * 2, -r * 2.2);
+-    ctx.lineTo(i * step - r * 2, r * 0.8);
+-    ctx.stroke();
+-  }
+-  ctx.restore();
+-  ctx.beginPath();
+-  bagEdge();
+-  ink(ctx, line * 1.5);
+-  // Front rim, over the fish.
+-  ctx.beginPath();
+-  ctx.ellipse(0, 0, rx, ry, 0, 0, Math.PI);
+-  ink(ctx, ringW + line * 2);
+-  ctx.beginPath();
+-  ctx.ellipse(0, 0, rx, ry, 0, 0, Math.PI);
+-  ctx.strokeStyle = frame.base;
+-  ctx.lineWidth = ringW;
+-  ctx.stroke();
+-  ctx.beginPath();
+-  ctx.ellipse(0, 0, rx, ry, 0, Math.PI * 0.3, Math.PI * 0.62);
+-  ctx.strokeStyle = "rgba(255,255,255,0.8)";
+-  ctx.lineWidth = ringW * 0.32;
+-  ctx.lineCap = "round";
+-  ctx.stroke();
+-  // Short handle off the near-right of the rim, wood with a round knob.
+-  const h0 = { x: rx * 0.92, y: ry * 0.4 };
+-  const h1 = { x: rx * 1.55, y: ry * 1.25 };
+-  for (const [wdt, style] of [[ringW + line * 2, SCENE_INK], [ringW, "#e39a52"]] as const) {
+-    ctx.beginPath();
+-    ctx.moveTo(h0.x, h0.y);
+-    ctx.lineTo(h1.x, h1.y);
+-    ctx.strokeStyle = style;
+-    ctx.lineWidth = wdt;
+-    ctx.lineCap = "round";
+-    ctx.stroke();
+-  }
+-  ctx.restore();
+-  const hx = x + Math.cos(tilt) * h1.x - Math.sin(tilt) * h1.y;
+-  const hy = y + Math.sin(tilt) * h1.x + Math.cos(tilt) * h1.y;
+-  celEllipse(ctx, ref, hx, hy, ringW * 0.75, ringW * 0.75, frame.base, W);
+-}
+-
+-function kelpBlade(ctx: Ctx, x: number, base: number, hgt: number, ref: number, color: string, lean: number) {
+-  cel(
+-    ctx,
+-    ref,
+-    () => {
+-      ctx.moveTo(x - hgt * 0.07, base);
+-      ctx.quadraticCurveTo(x - hgt * 0.18 + lean, base - hgt * 0.5, x + lean, base - hgt);
+-      ctx.quadraticCurveTo(x + hgt * 0.16 + lean, base - hgt * 0.5, x + hgt * 0.07, base);
+-      ctx.closePath();
+-    },
+-    color,
+-    x,
+-    base - hgt * 0.7,
+-    hgt * 0.3,
+-    W,
+-  );
+-}
+-
+-export function paintFishCard(ctx: Ctx, w: number, h: number, pair: [ColorId, ColorId]) {
+-  const g = ctx.createLinearGradient(0, 0, 0, h);
+-  g.addColorStop(0, "#8eeaf8");
+-  g.addColorStop(0.5, "#38b6dc");
+-  g.addColorStop(1, "#1f8eb8");
+-  ctx.fillStyle = g;
+-  ctx.fillRect(0, 0, w, h);
+-  ctx.save();
+-  ctx.globalAlpha = 0.16;
+-  ctx.fillStyle = "#ffffff";
+-  for (const x0 of [0.12, 0.48]) {
+-    ctx.beginPath();
+-    ctx.moveTo(w * x0, 0);
+-    ctx.lineTo(w * (x0 + 0.1), 0);
+-    ctx.lineTo(w * (x0 + 0.24), h);
+-    ctx.lineTo(w * (x0 + 0.08), h);
+-    ctx.closePath();
+-    ctx.fill();
+-  }
+-  ctx.restore();
+-  kelpBlade(ctx, w * 0.1, h * 0.92, h * 0.5, w, "#2fbf5a", w * 0.03);
+-  kelpBlade(ctx, w * 0.19, h * 0.94, h * 0.36, w, "#1f9a4a", -w * 0.02);
+-  kelpBlade(ctx, w * 0.9, h * 0.93, h * 0.42, w, "#4cd06a", -w * 0.03);
+-  hill(ctx, w, h, 0.88, 0.03, 2.2, SCENERY.sand, "#dba95c");
+-  // Starfish-ish dot rocks.
+-  celEllipse(ctx, w, w * 0.72, h * 0.9, w * 0.06, w * 0.035, "#ff8a5c", W);
+-  netHoop(ctx, w * 0.6, h * 0.42, w * 0.19, pair[0], w);
+-  fishShape(ctx, w * 0.32, h * 0.7, w * 0.12, pair[1]);
+-  bubble(ctx, w * 0.24, h * 0.3, w * 0.025);
+-  bubble(ctx, w * 0.3, h * 0.2, w * 0.016);
+-  bubble(ctx, w * 0.24, h * 0.58, w * 0.02);
+-}
+-
+-/* ------------------------------------------------------------- Shape Box */
+-
+-function holeRim(ctx: Ctx, kind: "round" | "square" | "star", x: number, y: number, r: number, rim: string) {
+-  const path = () => {
+-    if (kind === "round") ctx.ellipse(x, y, r, r * 0.62, 0, 0, Math.PI * 2);
+-    else if (kind === "square") ctx.roundRect(x - r * 0.9, y - r * 0.56, r * 1.8, r * 1.12, r * 0.14);
+-    else {
+-      for (let i = 0; i < 10; i++) {
+-        const rad = i % 2 === 0 ? r * 1.05 : r * 0.48;
+-        const a = -Math.PI / 2 + (i * Math.PI) / 5;
+-        const px = x + Math.cos(a) * rad;
+-        const py = y + Math.sin(a) * rad * 0.62;
+-        if (i === 0) ctx.moveTo(px, py);
+-        else ctx.lineTo(px, py);
+-      }
+-      ctx.closePath();
+-    }
+-  };
+-  // Thick colour rim with a navy outline, black interior.
+-  ctx.beginPath();
+-  path();
+-  ctx.strokeStyle = SCENE_INK;
+-  ctx.lineWidth = r * 0.5;
+-  ctx.lineJoin = "round";
+-  ctx.stroke();
+-  ctx.beginPath();
+-  path();
+-  ctx.strokeStyle = rim;
+-  ctx.lineWidth = r * 0.3;
+-  ctx.stroke();
+-  ctx.beginPath();
+-  path();
+-  ctx.fillStyle = "#0b0d14";
+-  ctx.fill();
+-}
+-
+-export function paintBoxCard(ctx: Ctx, w: number, h: number) {
+-  skyWash(ctx, w, h);
+-  cloud(ctx, w * 0.18, h * 0.16, w * 0.22, w, true);
+-  cloud(ctx, w * 0.84, h * 0.24, w * 0.18, w, true);
+-  const yOf = hill(ctx, w, h, 0.7, 0.035, 2.6, SCENERY.grassLight, SCENERY.grassDark);
+-  bushIn(ctx, w * 0.08, yOf(0.08) + h * 0.03, w * 0.12, w, "#2f9e4f");
+-  bushIn(ctx, w * 0.94, yOf(0.94) + h * 0.03, w * 0.11, w, "#4cbb4a");
+-  const bx = w * 0.18;
+-  const bw = w * 0.64;
+-  const by = h * 0.42;
+-  const bh = h * 0.42;
+-  contact(ctx, w * 0.5, by + bh + h * 0.02, bw * 0.62, h * 0.04);
+-  // Front.
+-  celRoundRect(ctx, w, bx, by, bw, bh, w * 0.05, "#e2a457", W);
+-  // Honey-wood plank seams, as on the game's box.
+-  ctx.save();
+-  ctx.strokeStyle = "rgba(150, 95, 40, 0.42)";
+-  ctx.lineWidth = Math.max(1, w * 0.006);
+-  for (const f of [0.34, 0.67]) {
+-    ctx.beginPath();
+-    ctx.moveTo(bx + w * 0.02, by + bh * f);
+-    ctx.lineTo(bx + bw - w * 0.02, by + bh * f);
+-    ctx.stroke();
+-  }
+-  ctx.restore();
+-  // Lid (top face).
+-  cel(
+-    ctx,
+-    w,
+-    () => {
+-      ctx.moveTo(bx - w * 0.01, by + h * 0.01);
+-      ctx.lineTo(bx + w * 0.07, by - h * 0.17);
+-      ctx.lineTo(bx + bw + w * 0.07 - w * 0.08, by - h * 0.17);
+-      ctx.lineTo(bx + bw + w * 0.01, by + h * 0.01);
+-      ctx.closePath();
+-    },
+-    "#f4cc8a",
+-    bx + bw * 0.3,
+-    by - h * 0.12,
+-    bw * 0.5,
+-    W,
+-  );
+-  // Holes as in the game: black inside, rims in the matching toy's colour.
+-  holeRim(ctx, "round", bx + bw * 0.24, by - h * 0.08, w * 0.07, PUNCH.red.base);
+-  holeRim(ctx, "square", bx + bw * 0.52, by - h * 0.08, w * 0.065, PUNCH.yellow.base);
+-  holeRim(ctx, "star", bx + bw * 0.79, by - h * 0.08, w * 0.07, PUNCH.green.base);
+-  face(ctx, bx + bw * 0.4, by + bh * 0.5, bh * 0.4, "smile");
+-  // The glass porthole on the front, right of the face.
+-  {
+-    const px = bx + bw * 0.8;
+-    const py = by + bh * 0.5;
+-    const pr = bh * 0.26;
+-    ctx.beginPath();
+-    ctx.arc(px, py, pr, 0, Math.PI * 2);
+-    ctx.fillStyle = "rgba(255, 236, 205, 0.35)";
+-    ctx.fill();
+-    ctx.lineWidth = Math.max(2, w * 0.012);
+-    ctx.strokeStyle = "rgba(255, 246, 232, 0.9)";
+-    ctx.stroke();
+-    ctx.beginPath();
+-    ctx.arc(px, py, pr * 0.7, -Math.PI * 0.85, -Math.PI * 0.55);
+-    ctx.strokeStyle = "rgba(255,255,255,0.85)";
+-    ctx.lineCap = "round";
+-    ctx.lineWidth = Math.max(1.5, w * 0.008);
+-    ctx.stroke();
+-  }
+-  // The toys waiting in front: a red ball and a yellow cube.
+-  const ty = h * 0.86;
+-  contact(ctx, w * 0.2, ty + w * 0.07, w * 0.07, h * 0.02);
+-  celEllipse(ctx, w, w * 0.2, ty, w * 0.075, w * 0.075, PUNCH.red.base, W);
+-  const cs = w * 0.13;
+-  const cx0 = w * 0.8 - cs / 2;
+-  const cy0 = ty - cs * 0.55;
+-  contact(ctx, w * 0.8, ty + cs * 0.48, cs * 0.6, h * 0.02);
+-  cel(
+-    ctx,
+-    w,
+-    () => {
+-      ctx.moveTo(cx0 + cs * 0.2, cy0);
+-      ctx.lineTo(cx0 + cs * 1.2, cy0);
+-      ctx.lineTo(cx0 + cs, cy0 + cs * 0.22);
+-      ctx.lineTo(cx0, cy0 + cs * 0.22);
+-      ctx.closePath();
+-    },
+-    PUNCH.yellow.light,
+-    cx0 + cs * 0.6,
+-    cy0,
+-    cs * 0.5,
+-    W,
+-  );
+-  celRoundRect(ctx, w, cx0, cy0 + cs * 0.22, cs, cs * 0.86, cs * 0.12, PUNCH.yellow.base, W);
+-  sparkle(ctx, bx + bw * 0.42, h * 0.08, w * 0.04, "#ffffff");
+-}
+diff --git a/src/game/stars/starArt.ts b/src/game/stars/starArt.ts
+index 17568c3..9cf6465 100644
+--- a/src/game/stars/starArt.ts
++++ b/src/game/stars/starArt.ts
+@@ -50,6 +50,23 @@ export function starPath(ctx: Ctx, x: number, y: number, r: number, rot = -Math.
+   ctx.closePath();
+ }
+ 
++/**
++ * release-1: the house navy line made to read on the night sky: a faint pale rim just outside,
++ * then the navy line itself (call with the shape's path current; strokes it twice).
++ */
++function nightInk(ctx: Ctx, lw: number, rim = 0.26) {
++  ctx.save();
++  ctx.lineJoin = "round";
++  ctx.lineCap = "round";
++  ctx.strokeStyle = `rgba(214, 208, 248, ${rim})`;
++  ctx.lineWidth = lw * 2.4;
++  ctx.stroke();
++  ctx.strokeStyle = SCENE_INK;
++  ctx.lineWidth = lw;
++  ctx.stroke();
++  ctx.restore();
++}
++
+ /**
+  * The bedtime sky: a dithered black-to-purple gradient (no banding), a dense faint starfield of
+  * varied sizes, a few dim far-away galaxies and wisps of nebula. Painted once per size.
+@@ -127,30 +144,19 @@ export function paintStarfield(ctx: Ctx, w: number, h: number, screenFade = fals
+     ctx.fillStyle = g;
+     ctx.fillRect(x - rr, y - rr, rr * 2, rr * 2);
+   }
+-  // 3) A few far-away galaxies: tilted soft ellipses with a faint core and arms.
+-  const galaxies = Math.max(6, Math.round((w * h) / 70000));
++  // 3) A few far-away galaxies, painted as small soft curls (release-1: no photo-like blur).
++  const galaxies = Math.max(4, Math.round((w * h) / 150000));
++  ctx.globalCompositeOperation = "source-over";
+   for (let i = 0; i < galaxies; i++) {
+     const x = (0.12 + ((i + r2() * 0.6) / galaxies) * 0.8) * w;
+     const y = (screenFade ? 0.12 + r2() * 0.55 : 0.08 + r2() * 0.84) * h;
+-    const size = (0.035 + r2() * 0.04) * Math.min(w, h) * 1.6;
++    const size = (0.035 + r2() * 0.04) * Math.min(w, h) * 0.55;
+     const rot = r2() * Math.PI;
+     ctx.save();
+     ctx.translate(x, y);
+     ctx.rotate(rot);
+-    ctx.scale(1, 0.38 + r2() * 0.22);
+-    const g = ctx.createRadialGradient(0, 0, 0, 0, 0, size);
+-    const tint = i % 2 ? "190, 170, 230" : "200, 185, 215";
+-    g.addColorStop(0, `rgba(${tint}, 0.16)`);
+-    g.addColorStop(0.25, `rgba(${tint}, 0.07)`);
+-    g.addColorStop(1, `rgba(${tint}, 0)`);
+-    ctx.fillStyle = g;
+-    ctx.beginPath();
+-    ctx.arc(0, 0, size, 0, Math.PI * 2);
+-    ctx.fill();
+-    ctx.fillStyle = `rgba(235, 225, 245, 0.22)`;
+-    ctx.beginPath();
+-    ctx.arc(0, 0, Math.max(0.8, size * 0.05), 0, Math.PI * 2);
+-    ctx.fill();
++    ctx.scale(1, 0.45 + r2() * 0.25);
++    farCurl(ctx, size, i % 2 ? "190, 170, 230" : "200, 185, 215", 0.13);
+     ctx.restore();
+   }
+   ctx.restore();
+@@ -187,69 +193,104 @@ export function paintStarfield(ctx: Ctx, w: number, h: number, screenFade = fals
+   }
+ }
+ 
+-/** A soft round dot sprite (white), drawn once and tinted by globalAlpha/compositing. */
+-let dotSprite: HTMLCanvasElement | null = null;
+-function softDot() {
+-  if (dotSprite) return dotSprite;
+-  const c = document.createElement("canvas");
+-  c.width = c.height = 64;
+-  const x = c.getContext("2d")!;
+-  const g = x.createRadialGradient(32, 32, 0, 32, 32, 32);
+-  g.addColorStop(0, "rgba(255,255,255,1)");
+-  g.addColorStop(0.4, "rgba(255,255,255,0.45)");
+-  g.addColorStop(1, "rgba(255,255,255,0)");
+-  x.fillStyle = g;
+-  x.fillRect(0, 0, 64, 64);
+-  dotSprite = c;
+-  return c;
+-}
+-
+-/** Spiral galaxy in local units (radius 1), already translated/rotated/squashed by the caller. */
++/**
++ * release-1: a painted spiral galaxy (house style, not photographic): two or three tapered swirl
++ * ribbons around a round core, flat soft fills with a thin navy line, kept dim for bedtime.
++ * Local units: centred on (0, 0), radius `size`; the caller translates/rotates/squashes.
++ */
+ function spiralGalaxy(ctx: Ctx, size: number, seed: number, tint: [number, number, number]) {
+   const r = rng(seed);
+-  const dot = softDot();
+   const [tr, tg, tb] = tint;
+-  // Diffuse disc glow.
++  const lw = Math.max(1.4, size * 0.035);
++  // Soft painted disc behind the arms.
+   const disc = ctx.createRadialGradient(0, 0, 0, 0, 0, size);
+-  disc.addColorStop(0, `rgba(${tr}, ${tg}, ${tb}, 0.16)`);
+-  disc.addColorStop(0.45, `rgba(${tr}, ${tg}, ${tb}, 0.06)`);
++  disc.addColorStop(0, `rgba(${tr}, ${tg}, ${tb}, 0.2)`);
++  disc.addColorStop(0.6, `rgba(${tr}, ${tg}, ${tb}, 0.08)`);
+   disc.addColorStop(1, `rgba(${tr}, ${tg}, ${tb}, 0)`);
+   ctx.fillStyle = disc;
+   ctx.beginPath();
+   ctx.arc(0, 0, size, 0, Math.PI * 2);
+   ctx.fill();
+-  // Two logarithmic arms of soft dots, thinning and fading outward.
+-  ctx.save();
+-  ctx.globalCompositeOperation = "lighter";
+-  for (let arm = 0; arm < 2; arm++) {
+-    for (let i = 0; i < 140; i++) {
+-      const t = i / 139;
+-      const th = arm * Math.PI + t * Math.PI * 2.4;
+-      const rr = size * (0.1 + 0.86 * t) * (1 + (r() - 0.5) * 0.08);
+-      const jitter = size * 0.05 * (r() - 0.5);
+-      const x = Math.cos(th) * rr + jitter;
+-      const y = Math.sin(th) * rr + jitter;
+-      const ds = size * (0.2 - t * 0.12) * (0.7 + r() * 0.6);
+-      ctx.globalAlpha = 0.07 * (1 - t * 0.7);
+-      ctx.drawImage(dot, x - ds, y - ds, ds * 2, ds * 2);
+-      if (r() < 0.25) {
+-        // Tiny star-forming knots along the arm.
+-        const k = size * 0.018;
+-        ctx.globalAlpha = 0.3 * (1 - t * 0.6);
+-        ctx.drawImage(dot, x - k, y - k, k * 2, k * 2);
+-      }
++  const arms = r() < 0.5 ? 2 : 3;
++  const turn = Math.PI * (1.15 + r() * 0.25);
++  for (let arm = 0; arm < arms; arm++) {
++    const a0 = (arm * Math.PI * 2) / arms + r() * 0.3;
++    // A tapered ribbon along a spiral: out along one edge, back along the other.
++    const N = 28;
++    const outer: [number, number][] = [];
++    const inner: [number, number][] = [];
++    for (let i = 0; i <= N; i++) {
++      const t = i / N;
++      const th = a0 + t * turn;
++      const rr = size * (0.16 + 0.8 * t);
++      const half = size * 0.13 * (1 - t) ** 0.8 + size * 0.012;
++      const nx = Math.cos(th);
++      const ny = Math.sin(th);
++      outer.push([nx * (rr + half), ny * (rr + half)]);
++      inner.push([nx * (rr - half), ny * (rr - half)]);
++    }
++    ctx.beginPath();
++    ctx.moveTo(outer[0]![0], outer[0]![1]);
++    for (const [x, y] of outer) ctx.lineTo(x, y);
++    for (let i = inner.length - 1; i >= 0; i--) ctx.lineTo(inner[i]![0], inner[i]![1]);
++    ctx.closePath();
++    const g = ctx.createRadialGradient(0, 0, size * 0.1, 0, 0, size);
++    g.addColorStop(0, `rgba(${Math.min(255, tr + 30)}, ${Math.min(255, tg + 26)}, ${Math.min(255, tb + 20)}, 0.36)`);
++    g.addColorStop(1, `rgba(${tr}, ${tg}, ${tb}, 0.16)`);
++    ctx.fillStyle = g;
++    ctx.fill();
++    ctx.strokeStyle = "rgba(46, 65, 104, 0.45)";
++    ctx.lineWidth = lw;
++    ctx.lineJoin = "round";
++    ctx.stroke();
++    // A few painted star-knots along the arm.
++    ctx.fillStyle = "rgba(246, 238, 250, 0.4)";
++    for (let k = 0; k < 4; k++) {
++      const t = 0.25 + k * 0.18 + r() * 0.05;
++      const th = a0 + t * turn;
++      const rr = size * (0.16 + 0.8 * t);
++      ctx.beginPath();
++      ctx.arc(Math.cos(th) * rr, Math.sin(th) * rr, size * 0.025, 0, Math.PI * 2);
++      ctx.fill();
+     }
+   }
+-  ctx.restore();
+-  // Soft warm core.
+-  const core = ctx.createRadialGradient(0, 0, 0, 0, 0, size * 0.3);
+-  core.addColorStop(0, "rgba(246, 236, 214, 0.55)");
+-  core.addColorStop(0.35, "rgba(236, 222, 210, 0.22)");
+-  core.addColorStop(1, "rgba(220, 205, 220, 0)");
++  // Round warm core with the navy line.
++  ctx.beginPath();
++  ctx.arc(0, 0, size * 0.2, 0, Math.PI * 2);
++  const core = ctx.createRadialGradient(-size * 0.06, -size * 0.06, 0, 0, 0, size * 0.2);
++  core.addColorStop(0, "rgba(248, 238, 214, 0.75)");
++  core.addColorStop(1, "rgba(226, 206, 200, 0.5)");
+   ctx.fillStyle = core;
++  ctx.fill();
++  ctx.strokeStyle = "rgba(46, 65, 104, 0.6)";
++  ctx.lineWidth = lw;
++  ctx.stroke();
++}
++
++/** release-1: a tiny far-away galaxy as a painted curl (two short swirl strokes and a dot). */
++function farCurl(ctx: Ctx, size: number, tint: string, alpha: number) {
++  ctx.save();
++  ctx.lineCap = "round";
++  ctx.strokeStyle = `rgba(${tint}, ${alpha.toFixed(3)})`;
++  ctx.lineWidth = Math.max(0.8, size * 0.16);
++  for (const a0 of [0, Math.PI]) {
++    ctx.beginPath();
++    for (let i = 0; i <= 12; i++) {
++      const t = i / 12;
++      const th = a0 + t * Math.PI * 1.1;
++      const rr = size * (0.2 + 0.8 * t);
++      const x = Math.cos(th) * rr;
++      const y = Math.sin(th) * rr;
++      if (i === 0) ctx.moveTo(x, y);
++      else ctx.lineTo(x, y);
++    }
++    ctx.stroke();
++  }
++  ctx.fillStyle = `rgba(240, 232, 246, ${(alpha * 1.4).toFixed(3)})`;
+   ctx.beginPath();
+-  ctx.arc(0, 0, size * 0.3, 0, Math.PI * 2);
++  ctx.arc(0, 0, size * 0.22, 0, Math.PI * 2);
+   ctx.fill();
++  ctx.restore();
+ }
+ 
+ /**
+@@ -273,38 +314,33 @@ export function paintNearSpiral(seed: number, tint: readonly [number, number, nu
+   };
+ }
+ 
+-/** Edge-on galaxy: a thin glowing lens with a soft bulge and a faint dust lane, filling w x h. */
++/** Edge-on galaxy, painted: a slim almond lens with a round bulge, flat fills and a thin navy line. */
+ export function paintEdgeGalaxy(ctx: Ctx, w: number, h: number) {
+-  const L = w * 0.48;
++  const L = w * 0.46;
++  const T = Math.max(3, L * 0.11);
++  const lw = Math.max(1.4, L * 0.022);
+   ctx.save();
+   ctx.translate(w / 2, h / 2);
+-  ctx.save();
+-  ctx.scale(1, 0.13);
+-  const lens = ctx.createRadialGradient(0, 0, 0, 0, 0, L);
+-  lens.addColorStop(0, "rgba(232, 224, 236, 0.4)");
+-  lens.addColorStop(0.4, "rgba(206, 198, 230, 0.15)");
+-  lens.addColorStop(1, "rgba(206, 198, 230, 0)");
+-  ctx.fillStyle = lens;
+   ctx.beginPath();
+-  ctx.arc(0, 0, L, 0, Math.PI * 2);
++  ctx.moveTo(-L, 0);
++  ctx.quadraticCurveTo(0, -T * 2, L, 0);
++  ctx.quadraticCurveTo(0, T * 2, -L, 0);
++  ctx.closePath();
++  const g = ctx.createLinearGradient(-L, 0, L, 0);
++  g.addColorStop(0, "rgba(206, 198, 230, 0.12)");
++  g.addColorStop(0.5, "rgba(226, 216, 238, 0.5)");
++  g.addColorStop(1, "rgba(206, 198, 230, 0.12)");
++  ctx.fillStyle = g;
+   ctx.fill();
+-  ctx.restore();
+-  ctx.save();
+-  ctx.scale(1, 0.55);
+-  const bulge = ctx.createRadialGradient(0, 0, 0, 0, 0, L * 0.2);
+-  bulge.addColorStop(0, "rgba(246, 236, 216, 0.42)");
+-  bulge.addColorStop(1, "rgba(246, 236, 216, 0)");
+-  ctx.fillStyle = bulge;
++  ctx.strokeStyle = "rgba(46, 65, 104, 0.55)";
++  ctx.lineWidth = lw;
++  ctx.lineJoin = "round";
++  ctx.stroke();
+   ctx.beginPath();
+-  ctx.arc(0, 0, L * 0.2, 0, Math.PI * 2);
++  ctx.ellipse(0, 0, L * 0.17, T * 1.25, 0, 0, Math.PI * 2);
++  ctx.fillStyle = "rgba(246, 236, 216, 0.6)";
+   ctx.fill();
+-  ctx.restore();
+-  ctx.strokeStyle = "rgba(20, 12, 36, 0.35)";
+-  ctx.lineWidth = Math.max(1, L * 0.022);
+-  ctx.lineCap = "round";
+-  ctx.beginPath();
+-  ctx.moveTo(-L * 0.72, L * 0.008);
+-  ctx.lineTo(L * 0.72, L * 0.008);
++  ctx.strokeStyle = "rgba(46, 65, 104, 0.6)";
+   ctx.stroke();
+   ctx.restore();
+ }
+@@ -339,10 +375,7 @@ export function paintWishStar(ctx: Ctx, w: number, h: number) {
+   body.addColorStop(1, "#d9a84c");
+   ctx.fillStyle = body;
+   ctx.fill();
+-  ctx.strokeStyle = SCENE_INK;
+-  ctx.lineWidth = Math.max(1.6, r * 0.09);
+-  ctx.lineJoin = "round";
+-  ctx.stroke();
++  nightInk(ctx, Math.max(2, r * 0.085));
+   paintSleepyFace(ctx, cx, cy + r * 0.12, r * 0.62, "rgba(230, 150, 120, 0.34)");
+ }
+ 
+@@ -403,12 +436,7 @@ export function paintStarBody(tint: number, awake = 0) {
+     ctx.fillStyle = g;
+     ctx.fillRect(0, 0, w, h);
+     const rot = -Math.PI / 2;
+-    // Navy outline, then a gentle cel-shaded fill.
+-    starPath(ctx, cx, cy, r, rot);
+-    ctx.strokeStyle = SCENE_INK;
+-    ctx.lineWidth = Math.max(2.4, r * 0.11);
+-    ctx.lineJoin = "round";
+-    ctx.stroke();
++    // A gentle cel-shaded fill, then the navy line (with a faint rim so it reads on the night sky).
+     starPath(ctx, cx, cy, r, rot);
+     const fill = ctx.createRadialGradient(cx - r * 0.25, cy - r * 0.3, r * 0.05, cx, cy, r * 1.1);
+     fill.addColorStop(0, t.light);
+@@ -425,6 +453,8 @@ export function paintStarBody(tint: number, awake = 0) {
+     ctx.ellipse(cx - r * 0.28, cy - r * 0.38, r * 0.26, r * 0.12, -0.6, 0, Math.PI * 2);
+     ctx.fill();
+     ctx.restore();
++    starPath(ctx, cx, cy, r, rot);
++    nightInk(ctx, Math.max(2.4, r * 0.085));
+     paintSleepyFace(ctx, cx, cy + r * 0.05, r, t.cheek, awake);
+   };
+ }
+@@ -453,12 +483,9 @@ export function paintTinyStar(tint: number) {
+   return (ctx: Ctx, w: number, h: number) => {
+     const r = Math.min(w, h) * 0.38;
+     starPath(ctx, w / 2, h / 2, r);
+-    ctx.strokeStyle = SCENE_INK;
+-    ctx.lineWidth = Math.max(1.4, r * 0.14);
+-    ctx.lineJoin = "round";
+-    ctx.stroke();
+     ctx.fillStyle = t.base;
+     ctx.fill();
++    nightInk(ctx, Math.max(1.4, r * 0.12), 0.2);
+   };
+ }
+ 
+@@ -531,17 +558,13 @@ export function paintJar(count: number) {
+     ctx.fill();
+     ctx.restore();
+     body();
+-    ctx.strokeStyle = SCENE_INK;
+-    ctx.lineWidth = lw;
+-    ctx.stroke();
++    nightInk(ctx, lw);
+     // Neck and lid.
+     ctx.beginPath();
+     ctx.roundRect(w * 0.2, h * 0.05, w * 0.6, h * 0.13, w * 0.06);
+     ctx.fillStyle = "#4a5a86";
+     ctx.fill();
+-    ctx.strokeStyle = SCENE_INK;
+-    ctx.lineWidth = lw;
+-    ctx.stroke();
++    nightInk(ctx, lw);
+     ctx.fillStyle = "rgba(200, 210, 240, 0.18)";
+     ctx.fillRect(w * 0.26, h * 0.08, w * 0.3, h * 0.03);
+   };
+@@ -647,6 +670,13 @@ function paintMoonShade(ctx: Ctx, w: number, h: number, lit: boolean) {
+     ctx.fillRect(0, 0, w, h);
+   }
+   ctx.restore();
++  // release-1: the house navy line round the dome (inset so the whole stroke stays on the canvas).
++  const lw = Math.max(2.4, Math.min(w, h) * 0.022);
++  ctx.save();
++  ctx.beginPath();
++  ctx.arc(cx, cy, R - lw * 1.3, 0, Math.PI * 2);
++  nightInk(ctx, lw, 0.2);
++  ctx.restore();
+ }
+ 
+ /** Small sleepy Pip (eyes closed), tinted for the night so he stays a quiet companion. */
+@@ -682,11 +712,14 @@ export function paintSleepyPip(cheer = 0) {
+     o.save();
+     o.setTransform(1, 0, 0, 1, 0, 0);
+     o.globalCompositeOperation = "source-atop";
+-    o.fillStyle = "rgba(40, 30, 90, 0.34)";
++    o.fillStyle = "rgba(40, 30, 90, 0.16)";
+     o.fillRect(0, 0, off.width, off.height);
+     o.restore();
+     ctx.save();
+     ctx.setTransform(1, 0, 0, 1, 0, 0);
++    // release-1: a faint pale rim glow so his navy outline reads against the night.
++    ctx.shadowColor = "rgba(214, 208, 248, 0.45)";
++    ctx.shadowBlur = Math.max(4, r * 0.12) * (ctx.canvas.width / Math.max(1, w));
+     ctx.drawImage(off, 0, 0);
+     ctx.restore();
+   };
+-- 
+2.47.3
+

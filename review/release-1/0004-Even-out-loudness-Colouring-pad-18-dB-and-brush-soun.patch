@@ -1,0 +1,80 @@
+From 779f8540b14402c6728f03e6b71e849fbd9ebd5c Mon Sep 17 00:00:00 2001
+From: box <b@x>
+Date: Mon, 16 Nov 2026 01:31:30 +0000
+Subject: [PATCH 4/5] Even out loudness: Colouring pad +18 dB and brush sounds
+ +8 dB, piano keys -7 dB (K-weighted, matched to the music beds); silent
+ pre-warm note so the first piano tap has no long frame
+
+---
+ src/game/audio.ts            | 15 +++++++++------
+ src/game/piano/pianoSynth.ts | 10 +++++++++-
+ 2 files changed, 18 insertions(+), 7 deletions(-)
+
+diff --git a/src/game/audio.ts b/src/game/audio.ts
+index 9800f7c..9f5d8d0 100644
+--- a/src/game/audio.ts
++++ b/src/game/audio.ts
+@@ -1,4 +1,4 @@
+-import { noteFor, type ColorId, type ShapeId } from "./theme";
++import { noteFor, type ColorId } from "./theme";
+ import { publicUrl } from "./publicUrl";
+ import { playKey, prepareVoice, type KeyNote, type PianoVoice } from "./piano/pianoSynth";
+ 
+@@ -79,7 +79,9 @@ const COLOR_MIDI: Record<ColorId, number> = {
+ const PAD_CHORD_SECONDS = 6;
+ const PAD_ATTACK = 2.2;
+ const PAD_RELEASE = 2.6;
+-const PAD_VOICE_GAIN = 0.0011;
++// release-1: +18 dB (was 0.0011): Colouring sat ~20 dB under the other modes and felt muted. Still only
++// the soft pad chords (no lead line), now at about the same perceived level as the music beds.
++const PAD_VOICE_GAIN = 0.0088;
+ const MUSIC_LOWPASS_HZ = 1200;
+ type PadVoice = { midi: number; wave: OscillatorType; gain: number };
+ /** C - Am - F - G, low and close voiced. Highest tone is E4 (330 Hz). */
+@@ -1213,10 +1215,11 @@ class AudioBus {
+     }
+     const s = this.scrib;
+     const set: Record<string, [number, number, number]> = {
+-      brush: [850, 0.9, 0.03],
+-      pencil: [2600, 1.6, 0.026],
+-      glitter: [1500, 1.1, 0.018],
+-      eraser: [520, 1.0, 0.03],
++      // release-1: about +8 dB so the brush is heard over the pad.
++      brush: [850, 0.9, 0.075],
++      pencil: [2600, 1.6, 0.06],
++      glitter: [1500, 1.1, 0.045],
++      eraser: [520, 1.0, 0.075],
+     };
+     const [freq, q, peak] = set[tool] ?? set.brush!;
+     s.f.frequency.setTargetAtTime(freq, now, 0.02);
+diff --git a/src/game/piano/pianoSynth.ts b/src/game/piano/pianoSynth.ts
+index 374d20a..386b2c2 100644
+--- a/src/game/piano/pianoSynth.ts
++++ b/src/game/piano/pianoSynth.ts
+@@ -18,7 +18,8 @@ export const VOICE_TRIM: Record<PianoVoice, number> = { piano: 0.85, xylo: 1, gu
+ /** The cow (animal keys 0-1) is far louder than the cats and bird; pull it into line. */
+ const COW_TRIM = 0.58;
+ /** Peak level of one key into the SFX bus. The house SFX sit at 0.03 to 0.07. */
+-export const KEY_PEAK = 0.085;
++// release-1: -7 dB (was 0.085) so playing the piano sits at the same perceived level as the other modes.
++export const KEY_PEAK = 0.0383;
+ 
+ function hz(midi: number) {
+   return 440 * 2 ** ((midi - 69) / 12);
+@@ -99,6 +100,13 @@ function pluck(ctx: Ctx, f: number) {
+ export function prepareVoice(ctx: Ctx, voice: PianoVoice) {
+   noise(ctx);
+   if (voice === "guitar") for (const m of SCALE_MIDI) pluck(ctx, hz(m - 12));
++  // release-1: play one silent note into a muted bus, so the first real tap does not pay for
++  // compiling the node-graph code (a long first frame on slow phones).
++  const mute = ctx.createGain();
++  mute.gain.value = 0;
++  mute.connect(ctx.destination);
++  const note = playKey(ctx, mute, voice, 4, ctx.currentTime, 0);
++  setTimeout(() => mute.disconnect(), Math.max(500, (note.end - ctx.currentTime) * 1000 + 300));
+ }
+ 
+ export interface KeyNote {
+-- 
+2.47.3
+
