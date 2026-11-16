@@ -121,3 +121,37 @@ On the emulator, the logs showed `requestAudioFocus … org.chromium.content.bro
   - Only the current track and the menu loop stay decoded. Träumerei alone is about 70 MB of PCM, so this cuts memory on phones.
   - A game that fails to start, or a game screen that throws, goes back to the menu.
   - A failed sim step can't stop the loop.
+
+---
+
+# 1.0.2 (versionCode 13): Pip launcher icon, Bach for Colouring
+
+**Launcher icon** (replaces the placeholder heart and star):
+- Pip with two balloons and a sparkle, painted with the app's own master Pip (`window.__housePip`) in the same layout as the store icon (`play_store/icon_512.png`). Scripts: `review/android/release-1/icon/icon.mjs` (paints the layers) and `layers.py` (cuts every size).
+- Adaptive icon (`mipmap-anydpi-v26`): a background layer (sky, hill, flowers, two small sparkles) and a foreground layer (Pip, balloons, top sparkle). The whole foreground group sits inside a 65.4 dp circle, within the 66 dp safe zone, so circle, squircle, rounded-square and teardrop masks never clip ears, crest or balloons.
+- Monochrome layer for Android 13+ themed icons: navy outlines solid, fills at about 40 % alpha.
+- Legacy `ic_launcher` (rounded square) and `ic_launcher_round` for Android 7.x. All five densities, mdpi to xxxhdpi.
+- The old `drawable/ic_launcher_foreground.xml` and the `ic_launcher_background` colour are removed.
+- Previews: `review/android/release-1/icon/masks.png`, `themed_and_legacy.png`, `safe_zone.png`, `home_size.png`.
+
+**Colouring music:** J.S. Bach, Prelude No. 1 in C major, BWV 846, performed by Kimiko Ishizaka (Open Well-Tempered Clavier, CC0).
+- Cut from 1.39 s to 155.1 s of the recording. The final chord's 2.2 s ring-out is laid over the opening, so the loop is seamless: the wrap step is 0.0012, against a typical sample step of 0.02. The loop is 153.71 s (6,778,612 samples).
+- Loudness-matched to −20 LUFS integrated (peak −3.8 dBFS), the same as the other four tracks, and played at level 0.14 like the game tracks. Ogg Vorbis, 160 kb/s.
+- `prelude-intro.ogg` is the first 12 s of the same loop, so it starts instantly in the Android app with no `<audio>` streaming (the 1.0.1 freeze fix still applies).
+- The soft synth pad that Colouring used before is gone, along with all its code (`startMusic`/`stopMusic`, the pad chords and the pad background restart). The house rule stays: no recorder or flute music.
+- The Credits sheet and `CREDITS.txt` are updated, and the prelude is prefetched with the other game tracks.
+
+**Name:** still Pip's Pots everywhere. A rename is waiting for the final name. The app name on the Credits sheet is now one constant (`APP_NAME` in `credits.ts`), and its comment lists the other places a rename touches: the spa.html title, `__root.tsx`, `og/site.json`, `CREDITS.txt`, the notices and the Android `app_name`.
+
+**Checks (1.0.2 build):**
+- **Stars first, then menu, then every game** (Android WebView user agent, apk build, DPR 2.625):
+  - Each screen plays only its own loop: Stars Träumerei 195.7 s, Balloon Pop 60 s, Colouring prelude 153.7 s, Piano none, sorting 46.8 s, menu 96.6 s.
+  - Always 1 AudioContext, 0 media elements played, never paused, no errors.
+- **Audio focus** loss and gain in Stars: the game keeps moving, and a touch clears a native pause.
+- **Background pause** (`bgtest`): all checks pass except "hidden during game start: nodesHidden ≤ 2". It found 4 (intro plus loop, all on the suspended context, silent). 1.0.1 fails the same check the same way, so it is the test's old threshold from before the intros, not a regression.
+- **Fast switching** (`race.mjs`): 25 cases, never two loops, one context, no errors.
+- **Perf**, 4x CPU, 844x390, A/B against 1.0.1 on the same machine, two runs each:
+  - Colouring idle 0.06–0.07 vs 0.06–0.08; Colouring tapping 0.16–0.17 vs 0.14–0.15.
+  - Stars 0.23 vs 0.21–0.22; menu the same.
+  - The differences are within run-to-run noise, and everything stays under the 25 % budget except Piano 4 taps/s, as before.
+- Signed with the same upload key (SHA-256 A5:60:CA:…:AE:9F, the same as 1.0.1).

@@ -1,6 +1,6 @@
 diff -ruN -x build -x www -x .gradle -x local.properties -x '*.jar' android/app/build.gradle android-rel1/app/build.gradle
 --- android/app/build.gradle	2026-11-14 18:46:32.865198342 +0000
-+++ android-rel1/app/build.gradle	2026-11-16 08:41:35.646948158 +0000
++++ android-rel1/app/build.gradle	2026-11-16 17:32:21.439717187 +0000
 @@ -2,32 +2,57 @@
      id 'com.android.application'
  }
@@ -26,8 +26,8 @@ diff -ruN -x build -x www -x .gradle -x local.properties -x '*.jar' android/app/
 -        versionCode 10
 -        versionName "0.12.9"
 +        targetSdk 36
-+        versionCode 12
-+        versionName "1.0.1"
++        versionCode 13
++        versionName "1.0.2"
 +    }
 +
 +    signingConfigs {
@@ -90,7 +90,7 @@ diff -ruN -x build -x www -x .gradle -x local.properties -x '*.jar' android/app/
              android:configChanges="mcc|mnc|locale|touchscreen|keyboard|keyboardHidden|navigation|screenLayout|fontScale|uiMode|orientation|density|screenSize|smallestScreenSize|layoutDirection|colorMode|fontWeightAdjustment">
 diff -ruN -x build -x www -x .gradle -x local.properties -x '*.jar' android/app/src/main/java/com/lochlans/pipspots/MainActivity.java android-rel1/app/src/main/java/com/lochlans/pipspots/MainActivity.java
 --- android/app/src/main/java/com/lochlans/pipspots/MainActivity.java	2026-11-14 18:13:39.687331220 +0000
-+++ android-rel1/app/src/main/java/com/lochlans/pipspots/MainActivity.java	2026-11-16 08:41:29.895026093 +0000
++++ android-rel1/app/src/main/java/com/lochlans/pipspots/MainActivity.java	2026-11-16 17:59:59.739070428 +0000
 @@ -6,10 +6,15 @@
  import android.content.MutableContextWrapper;
  import android.media.AudioManager;
@@ -242,9 +242,77 @@ diff -ruN -x build -x www -x .gradle -x local.properties -x '*.jar' android/app/
 +    @SuppressWarnings("deprecation")
 +    @Override public void onBackPressed() { /* toddler-safe: ignore Back */ }
  }
+diff -ruN -x build -x www -x .gradle -x local.properties -x '*.jar' android/app/src/main/res/drawable/ic_launcher_foreground.xml android-rel1/app/src/main/res/drawable/ic_launcher_foreground.xml
+--- android/app/src/main/res/drawable/ic_launcher_foreground.xml	2026-11-14 18:13:39.675330796 +0000
++++ android-rel1/app/src/main/res/drawable/ic_launcher_foreground.xml	1970-01-01 01:00:00.000000000 +0100
+@@ -1,7 +0,0 @@
+-<vector xmlns:android="http://schemas.android.com/apk/res/android"
+-    android:width="108dp" android:height="108dp" android:viewportWidth="108" android:viewportHeight="108">
+-    <path android:fillColor="#FBF7F0"
+-        android:pathData="M54,78 C54,78 30,63 30,46 C30,38 36,32 43,32 C48,32 52,35 54,39 C56,35 60,32 65,32 C72,32 78,38 78,46 C78,63 54,78 54,78 Z"/>
+-    <path android:fillColor="#F2C46D"
+-        android:pathData="M70,24 L72.4,29.6 L78.4,30.1 L73.8,34 L75.2,39.9 L70,36.8 L64.8,39.9 L66.2,34 L61.6,30.1 L67.6,29.6 Z"/>
+-</vector>
+diff -ruN -x build -x www -x .gradle -x local.properties -x '*.jar' android/app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml android-rel1/app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml
+--- android/app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml	2026-11-14 18:13:39.675330796 +0000
++++ android-rel1/app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml	2026-11-16 17:32:21.431716989 +0000
+@@ -1,6 +1,6 @@
+ <?xml version="1.0" encoding="utf-8"?>
+ <adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+-    <background android:drawable="@color/ic_launcher_background"/>
+-    <foreground android:drawable="@drawable/ic_launcher_foreground"/>
+-    <monochrome android:drawable="@drawable/ic_launcher_foreground"/>
++    <background android:drawable="@mipmap/ic_launcher_background"/>
++    <foreground android:drawable="@mipmap/ic_launcher_foreground"/>
++    <monochrome android:drawable="@mipmap/ic_launcher_monochrome"/>
+ </adaptive-icon>
+diff -ruN -x build -x www -x .gradle -x local.properties -x '*.jar' android/app/src/main/res/mipmap-anydpi-v26/ic_launcher_round.xml android-rel1/app/src/main/res/mipmap-anydpi-v26/ic_launcher_round.xml
+--- android/app/src/main/res/mipmap-anydpi-v26/ic_launcher_round.xml	2026-11-14 18:13:39.675330796 +0000
++++ android-rel1/app/src/main/res/mipmap-anydpi-v26/ic_launcher_round.xml	2026-11-16 17:32:21.431716989 +0000
+@@ -1,6 +1,6 @@
+ <?xml version="1.0" encoding="utf-8"?>
+ <adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+-    <background android:drawable="@color/ic_launcher_background"/>
+-    <foreground android:drawable="@drawable/ic_launcher_foreground"/>
+-    <monochrome android:drawable="@drawable/ic_launcher_foreground"/>
++    <background android:drawable="@mipmap/ic_launcher_background"/>
++    <foreground android:drawable="@mipmap/ic_launcher_foreground"/>
++    <monochrome android:drawable="@mipmap/ic_launcher_monochrome"/>
+ </adaptive-icon>
+Binary files android/app/src/main/res/mipmap-hdpi/ic_launcher.png and android-rel1/app/src/main/res/mipmap-hdpi/ic_launcher.png differ
+Binary files android/app/src/main/res/mipmap-hdpi/ic_launcher_background.png and android-rel1/app/src/main/res/mipmap-hdpi/ic_launcher_background.png differ
+Binary files android/app/src/main/res/mipmap-hdpi/ic_launcher_foreground.png and android-rel1/app/src/main/res/mipmap-hdpi/ic_launcher_foreground.png differ
+Binary files android/app/src/main/res/mipmap-hdpi/ic_launcher_monochrome.png and android-rel1/app/src/main/res/mipmap-hdpi/ic_launcher_monochrome.png differ
+Binary files android/app/src/main/res/mipmap-hdpi/ic_launcher_round.png and android-rel1/app/src/main/res/mipmap-hdpi/ic_launcher_round.png differ
+Binary files android/app/src/main/res/mipmap-mdpi/ic_launcher.png and android-rel1/app/src/main/res/mipmap-mdpi/ic_launcher.png differ
+Binary files android/app/src/main/res/mipmap-mdpi/ic_launcher_background.png and android-rel1/app/src/main/res/mipmap-mdpi/ic_launcher_background.png differ
+Binary files android/app/src/main/res/mipmap-mdpi/ic_launcher_foreground.png and android-rel1/app/src/main/res/mipmap-mdpi/ic_launcher_foreground.png differ
+Binary files android/app/src/main/res/mipmap-mdpi/ic_launcher_monochrome.png and android-rel1/app/src/main/res/mipmap-mdpi/ic_launcher_monochrome.png differ
+Binary files android/app/src/main/res/mipmap-mdpi/ic_launcher_round.png and android-rel1/app/src/main/res/mipmap-mdpi/ic_launcher_round.png differ
+Binary files android/app/src/main/res/mipmap-xhdpi/ic_launcher.png and android-rel1/app/src/main/res/mipmap-xhdpi/ic_launcher.png differ
+Binary files android/app/src/main/res/mipmap-xhdpi/ic_launcher_background.png and android-rel1/app/src/main/res/mipmap-xhdpi/ic_launcher_background.png differ
+Binary files android/app/src/main/res/mipmap-xhdpi/ic_launcher_foreground.png and android-rel1/app/src/main/res/mipmap-xhdpi/ic_launcher_foreground.png differ
+Binary files android/app/src/main/res/mipmap-xhdpi/ic_launcher_monochrome.png and android-rel1/app/src/main/res/mipmap-xhdpi/ic_launcher_monochrome.png differ
+Binary files android/app/src/main/res/mipmap-xhdpi/ic_launcher_round.png and android-rel1/app/src/main/res/mipmap-xhdpi/ic_launcher_round.png differ
+Binary files android/app/src/main/res/mipmap-xxhdpi/ic_launcher.png and android-rel1/app/src/main/res/mipmap-xxhdpi/ic_launcher.png differ
+Binary files android/app/src/main/res/mipmap-xxhdpi/ic_launcher_background.png and android-rel1/app/src/main/res/mipmap-xxhdpi/ic_launcher_background.png differ
+Binary files android/app/src/main/res/mipmap-xxhdpi/ic_launcher_foreground.png and android-rel1/app/src/main/res/mipmap-xxhdpi/ic_launcher_foreground.png differ
+Binary files android/app/src/main/res/mipmap-xxhdpi/ic_launcher_monochrome.png and android-rel1/app/src/main/res/mipmap-xxhdpi/ic_launcher_monochrome.png differ
+Binary files android/app/src/main/res/mipmap-xxhdpi/ic_launcher_round.png and android-rel1/app/src/main/res/mipmap-xxhdpi/ic_launcher_round.png differ
+Binary files android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png and android-rel1/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png differ
+Binary files android/app/src/main/res/mipmap-xxxhdpi/ic_launcher_background.png and android-rel1/app/src/main/res/mipmap-xxxhdpi/ic_launcher_background.png differ
+Binary files android/app/src/main/res/mipmap-xxxhdpi/ic_launcher_foreground.png and android-rel1/app/src/main/res/mipmap-xxxhdpi/ic_launcher_foreground.png differ
+Binary files android/app/src/main/res/mipmap-xxxhdpi/ic_launcher_monochrome.png and android-rel1/app/src/main/res/mipmap-xxxhdpi/ic_launcher_monochrome.png differ
+Binary files android/app/src/main/res/mipmap-xxxhdpi/ic_launcher_round.png and android-rel1/app/src/main/res/mipmap-xxxhdpi/ic_launcher_round.png differ
+diff -ruN -x build -x www -x .gradle -x local.properties -x '*.jar' android/app/src/main/res/values/ic_launcher_background.xml android-rel1/app/src/main/res/values/ic_launcher_background.xml
+--- android/app/src/main/res/values/ic_launcher_background.xml	2026-11-14 18:13:39.679330937 +0000
++++ android-rel1/app/src/main/res/values/ic_launcher_background.xml	1970-01-01 01:00:00.000000000 +0100
+@@ -1,2 +0,0 @@
+-<?xml version="1.0" encoding="utf-8"?>
+-<resources><color name="ic_launcher_background">#3F7F7A</color></resources>
 diff -ruN -x build -x www -x .gradle -x local.properties -x '*.jar' android/app/src/main/res/values/strings.xml android-rel1/app/src/main/res/values/strings.xml
 --- android/app/src/main/res/values/strings.xml	2026-11-14 18:13:48.611601513 +0000
-+++ android-rel1/app/src/main/res/values/strings.xml	2026-11-16 01:27:03.651682331 +0000
++++ android-rel1/app/src/main/res/values/strings.xml	2026-11-16 17:59:59.735070406 +0000
 @@ -1 +1 @@
 -<resources><string name="app_name">Pip\'s Pots Preview</string></resources>
 +<resources><string name="app_name">Pip\'s Pots</string></resources>

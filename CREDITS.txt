@@ -22,6 +22,11 @@ Träumerei (Schumann) — performed by Donald Betts; recording from Musopen (pub
 Source: https://commons.wikimedia.org/wiki/File:Robert_Schumann_-_scenes_from_childhood,_op._15_-_vii._dreaming.ogg
 Musopen: https://musopen.org/music/2326-kinderszenen-scenes-from-childhood-op-15/
 
+Colouring music:
+Prelude No. 1 in C major, BWV 846 (J.S. Bach) — performed by Kimiko Ishizaka,
+Open Well-Tempered Clavier. Recording dedicated to the public domain (CC0).
+Source: https://commons.wikimedia.org/wiki/File:Kimiko_Ishizaka_-_Bach_-_Well-Tempered_Clavier,_Book_1_-_01_Prelude_No._1_in_C_major,_BWV_846.ogg
+
 Changes: each track was cut to a seamless loop (the Kevin MacLeod tracks with a
 1.5 s equal-power crossfade at a bar-aligned point), loudness-matched and
 re-encoded as Ogg Vorbis. "Daily Beetle" was cut to a 40-bar loop
@@ -32,6 +37,11 @@ start at once while the full loop loads.
 recording), looped with a 1.5 s equal-power crossfade (it is not a seamless loop),
 loudness-matched to -20 LUFS and re-encoded as Ogg Vorbis.
 
-Piano and Colouring: sounds and music made in the app.
+"Prelude in C" was trimmed of its leading silence (1.39 s to 155.1 s of the
+recording, ending as the last chord rings), looped by overlapping the final chord's
+2.2 s ring-out with the opening, loudness-matched to -20 LUFS and re-encoded as Ogg
+Vorbis. "prelude-intro" is the first 12 s of that same loop (as for every track).
+
+Piano: sounds made in the app.
 
 Open-source software notices: see THIRD_PARTY_NOTICES.txt.
