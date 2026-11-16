@@ -67,7 +67,11 @@
 - **28. Old WebViews.** On WebView/Chrome below 111 (or Safari below 16.4), a picture-only "please update" screen shows instead of a blank page. Verified on the API 30 emulator (WebView 83).
 
 ## NICE
-- **29. DOM node creep:** see the soak below.
+- **29. DOM node creep.** It's smaller, but not gone:
+  - In the 10-minute soak, nodes went 107 → 352 (0.12.9: 91 → 373) and the heap 4.0 → 11.0 MB (0.12.9: 7.8 → 14.8).
+  - Growth slows each cycle. Layout objects stay flat (57–59) and listeners stay flat (184).
+  - A heap snapshot after 3 cycles shows no detached DOM trees, so the growth is in non-layout nodes held by caches.
+  - Not a blocker. A real-device memory check during the closed test is still worth doing.
 - **30. Double-tap race.** One game start per menu visit: a second tile tap during the zoom-in is ignored. In 20/20 pairs the first tile wins (`race.json`).
 - **31. Piano first-tap long frame.** A silent pre-warm note at voice setup brought the max frame from 283 to 233 ms (844x390, 4x CPU).
 - **32. Stars DPR cap.** Not done on purpose: the house rule is full DPR.
@@ -88,4 +92,7 @@
   - The menu at 1280x800 went from 4.9 to 59 fps.
   - The train still shows a low fps in swiftshader with only ~6% main-thread busy (raster-bound on 2 full-DPR canvases, the same as 0.12.9).
 - **Old WebView:** checked on the API 30 emulator (WebView 83). Back was swallowed there.
-- **Soak:** see `soak_loudness.json`.
+- **10-minute soak** (`soak_loudness.json`): 17 mode visits through the menu tiles with play in each.
+  - 0 errors, always 1 AudioContext and 1 GL context, at most 1 music loop.
+  - 0 intervals and 0 pending timeouts at the menu.
+- **Not met:** Piano with 4 taps a second is 32% main-thread busy at 4x CPU, over the 25% house budget (it was 34%). Normal tapping is well under. Everything else is under 25%.
