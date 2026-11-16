@@ -15,9 +15,9 @@
   z-index: 1;
 }
 
-.game-root[data-phase="play"][data-mode="fish"] canvas:not(#c12-bg):not(#c12-fg),
-.game-root[data-phase="play"][data-mode="levels"] canvas:not(#c12-bg):not(#c12-fg),
-.game-root[data-phase="play"][data-mode="endless"] canvas:not(#c12-bg):not(#c12-fg),
-.game-root[data-phase="play"][data-mode="shapebox"] canvas:not(#c12-bg):not(#c12-fg) {
+/* The 3D view under the train is hidden (and, since release-1, not rendered at all). Only the
+   3D view: the grown-up panel's card pictures are canvases too and must stay visible. */
+.game-root[data-phase="play"][data-mode="levels"] > div:not(.game-ui):not(#c12-stage) canvas,
+.game-root[data-phase="play"][data-mode="endless"] > div:not(.game-ui):not(#c12-stage) canvas {
   opacity: 0;
 }

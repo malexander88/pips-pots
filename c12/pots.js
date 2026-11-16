@@ -138,21 +138,28 @@ function easeIn(t) {
 
 export function layoutPots(game, w, h) {
   const inset = safeInsets();
-  const u = Math.min(w / 844, h / 390);
+  // release-1 tablet framing: the scene is laid out in a bottom band no taller than w / 2 (a
+  // phone's shape), with the sky carrying on above it, and scales with that band. A tall tablet
+  // gets a bigger train and Pip instead of a small train in a wide, empty field.
+  const S = stageBand(w, h);
+  const u = Math.min(w / 800, S / 390);
   const left = inset.left + 8;
   const right = w - inset.right - 8;
   const bottom = h - Math.max(6, inset.bottom);
-  const grassFront = Math.max(20, Math.min(h * 0.13, 52 * u));
+  // release-1: on tall screens (tablets) the front grass bank grows a little with the height.
+  const grassFront = Math.max(20, Math.min(S * 0.14, 56 * u));
   const railY = bottom - grassFront;
   const n = Math.max(1, game.pots.length);
-  const pip = Math.min(96, Math.max(56, 74 * u));
+  // release-1: Pip and the train scale with the stage (no 96 px / 132 px caps), so a tablet
+  // gets a big train instead of a small one in a wide sky; the width fit below still applies.
+  const pip = Math.min(150, Math.max(56, 74 * u));
   // Keep Pip clear of a left-edge notch, and of the top-left home button vertically by staying low.
   const pipX = Math.max(left + pip * 0.62, inset.left + 28 + pip * 0.45);
   const pipY = railY - 2;
 
   const gap = Math.max(4, 6 * u);
-  let engineW = Math.min(120 * u, 132);
-  let wagonW = Math.min(92 * u, 100);
+  let engineW = Math.min(120 * u, 210);
+  let wagonW = Math.min(92 * u, 160);
   const trainInner = () => engineW + gap + n * wagonW + (n - 1) * gap;
   const startMin = pipX + pip * 0.85 + 16;
   let avail = Math.max(160, right - 8 - startMin);
@@ -223,6 +230,7 @@ export function layoutPots(game, w, h) {
     playTop,
     potBase: base,
     potTop: playTop,
+    wheelR: wheelR * 1.05,
     inset,
     off,
     enterDur,
@@ -659,17 +667,38 @@ function strokeInk(ctx, line) {
   ctx.stroke();
 }
 
-function drawPotsWorld(ctx, w, h, time, calm, view, part = "all") {
+/** release-1: height of the bottom band the train scene is laid out in (see layoutPots). */
+export function stageBand(w, h) {
+  return Math.min(h, Math.max(300, w / 2));
+}
+
+function drawPotsWorld(ctx, w, fullH, time, calm, fullView, part = "all") {
+  // Lay the world out in the bottom band (tablet framing); the sky fills the rest above.
+  const h = stageBand(w, fullH);
+  const lift = fullH - h;
+  const view = fullView && lift ? { ...fullView, playTop: fullView.playTop - lift } : fullView;
+  ctx.save();
+  ctx.translate(0, lift);
+  drawPotsWorldBand(ctx, w, h, lift, time, calm, view, part);
+  ctx.restore();
+}
+
+function drawPotsWorldBand(ctx, w, h, lift, time, calm, view, part) {
   const u = view?.u || Math.min(w / 844, h / 390);
   const line = inkWidth(u, "scene");
   const sway = part === "all" ? Math.sin(time * (calm ? 0.9 : 1.5)) : 0;
   if (part !== "mid") {
-  const sky = ctx.createLinearGradient(0, 0, 0, h);
+  const sky = ctx.createLinearGradient(0, -lift, 0, h);
   sky.addColorStop(0, "#58aef7");
   sky.addColorStop(0.42, "#9ed8fb");
   sky.addColorStop(1, "#b7e48a");
   ctx.fillStyle = sky;
-  ctx.fillRect(-80, 0, w + 160, h);
+  ctx.fillRect(-80, -lift, w + 160, h + lift);
+  if (lift > 60) {
+    // The taller sky gets a couple of high clouds of its own.
+    cloud(ctx, w * 0.3, -lift * 0.55, 40 * u, line);
+    cloud(ctx, w * 0.58, -lift * 0.3, 30 * u, line);
+  }
   const sunX = w * 0.8;
   const sunY = h * 0.14;
   const sun = ctx.createRadialGradient(sunX, sunY, 4 * u, sunX, sunY, 78 * u);
@@ -699,6 +728,8 @@ function drawPotsWorld(ctx, w, h, time, calm, view, part = "all") {
   strokeInk(ctx, line);
   barn(ctx, w * 0.63, h * 0.33, 34 * u, line);
   farFence(ctx, w * 0.07, h * 0.3, w * 0.12, u);
+  // release-1 depth: a mid-ground row of hills at the sides, between the far hill and the lawn.
+  midHills(ctx, w, h, u, line);
   }
   if (part === "far") return;
 
@@ -1018,11 +1049,9 @@ export function drawPots(game, bg, fg, w, h, calm) {
   }
 
   const sway = Math.sin(game.time * (calm ? 1.2 : 2));
-  for (let i = 0; i < 8; i++) {
-    const gx = (w * (i + 0.35)) / 8;
-    if (gx > v.playLeft && gx < v.playRight) continue;
-    baseTuft(ctx, gx, v.railY + v.grassFront * 0.55, (7 + (i % 3)) * u, sway + i);
-  }
+  // release-1 depth: a near grass bank in front of the rails (with tufts, clover and two low
+  // corner bushes), drifting a touch more than the lawn behind it.
+  drawFrontBank(ctx, w, h, v, line, sway, driftOf(game.time, calm, 0.26, 10));
 
   const bugs = w > 1100 ? 3 : 2;
   const colors = ["#ff5d8f", "#ffd000", "#7ec8ff"];
@@ -1055,11 +1084,95 @@ export function drawPots(game, bg, fg, w, h, calm) {
   for (const s of game.sparkles) drawSparkle(ctx, s);
 }
 
+/** release-1: mid-ground hills at the left and right, a step nearer and greener than the far hill. */
+function midHills(ctx, w, h, u, line) {
+  const edge = () => {
+    ctx.moveTo(-80, h * 0.36);
+    ctx.quadraticCurveTo(w * 0.1, h * 0.2, w * 0.34, h * 0.42);
+    ctx.quadraticCurveTo(w * 0.55, h * 0.5, w * 0.7, h * 0.42);
+    ctx.quadraticCurveTo(w * 0.9, h * 0.2, w + 80, h * 0.34);
+  };
+  const g = ctx.createLinearGradient(0, h * 0.28, 0, h * 0.48);
+  g.addColorStop(0, "#c4ec8e");
+  g.addColorStop(1, "#a6dc72");
+  ctx.beginPath();
+  edge();
+  ctx.lineTo(w + 80, h * 0.5);
+  ctx.lineTo(-80, h * 0.5);
+  ctx.closePath();
+  ctx.fillStyle = g;
+  ctx.fill();
+  ctx.beginPath();
+  edge();
+  strokeInk(ctx, Math.max(1.6, line * 0.8));
+  // A few soft field stripes and a hedgerow dot line, for scale.
+  ctx.save();
+  ctx.strokeStyle = "rgba(90, 160, 70, 0.28)";
+  ctx.lineWidth = Math.max(2, 3 * u);
+  ctx.lineCap = "round";
+  for (const [x0, y0, x1, y1] of [[0.0, 0.33, 0.16, 0.31], [0.02, 0.37, 0.22, 0.36], [0.84, 0.31, 0.99, 0.3], [0.8, 0.36, 0.99, 0.35]]) {
+    ctx.beginPath();
+    ctx.moveTo(w * x0, h * y0);
+    ctx.lineTo(w * x1, h * y1);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+/** release-1: the near grass bank below the rails (the front depth layer). */
+function drawFrontBank(ctx, w, h, v, line, sway, drift) {
+  const u = v.u;
+  const wheel = game_wheelR(v);
+  const top = Math.min(h - 8, v.railY + Math.max(14 * u, wheel * 1.12 + 2));
+  if (h - top < 8) return;
+  const wave = (x) => top + Math.sin((x + drift) / (46 * u)) * 2.5 * u + 2.5 * u;
+  ctx.save();
+  ctx.beginPath();
+  ctx.moveTo(-20, wave(-20));
+  for (let x = -20; x <= w + 20; x += 12) ctx.lineTo(x, wave(x));
+  ctx.lineTo(w + 20, h + 4);
+  ctx.lineTo(-20, h + 4);
+  ctx.closePath();
+  const g = ctx.createLinearGradient(0, top, 0, h);
+  g.addColorStop(0, "#46b044");
+  g.addColorStop(1, "#278a34");
+  ctx.fillStyle = g;
+  ctx.fill();
+  ctx.beginPath();
+  ctx.moveTo(-20, wave(-20));
+  for (let x = -20; x <= w + 20; x += 12) ctx.lineTo(x, wave(x));
+  strokeInk(ctx, Math.max(2, line * 0.85));
+  // Tufts along the bank edge and a little clover.
+  const n = Math.max(8, Math.round(w / (70 * u)));
+  for (let i = 0; i < n; i++) {
+    const gx = ((i + 0.4) / n) * w + drift * 0.5;
+    baseTuft(ctx, gx, wave(gx) + 3 * u, (8 + (i % 3) * 2) * u, sway + i);
+  }
+  const petals = ["#ffffff", "#ffd000", "#ff8fb4"];
+  for (let i = 0; i < Math.max(4, Math.round(n / 2)); i++) {
+    const fx = ((i + 0.75) / Math.max(4, Math.round(n / 2))) * w + drift * 0.5;
+    const fy = wave(fx) + (h - top) * (0.45 + (i % 3) * 0.12);
+    if (fy > h - 6 * u) continue;
+    flower(ctx, fx, fy, (9 + (i % 2) * 2) * u, petals[i % petals.length], line);
+  }
+  // Two low corner bushes, partly off screen (the nearest things in the picture).
+  const bs = Math.max(30, 52 * u);
+  bush(ctx, -bs * 0.12 + drift * 0.6, h - bs * 0.05, bs, line);
+  bush(ctx, w + bs * 0.1 + drift * 0.6, h - bs * 0.02, bs * 1.1, line);
+  ctx.restore();
+}
+
+function game_wheelR(v) {
+  return v.wheelR || 0;
+}
+
 function drawRails(ctx, w, v, line) {
   const y = v.railY;
   const inset = v.inset || { left: 0, right: 0 };
-  const x0 = inset.left - 8;
-  const x1 = w - inset.right + 8;
+  // release-1: the rails run right off both edges (no stub cap beside a cut-out).
+  void inset;
+  const x0 = -24;
+  const x1 = w + 24;
   ctx.save();
   ctx.fillStyle = "rgba(28, 42, 36, 0.18)";
   ctx.beginPath();
