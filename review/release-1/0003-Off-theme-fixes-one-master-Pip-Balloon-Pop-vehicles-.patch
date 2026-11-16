@@ -1,7 +1,7 @@
 From e2d9010b1ed00b0bd035e9b18753dfab20b7997b Mon Sep 17 00:00:00 2001
 From: box <b@x>
 Date: Mon, 16 Nov 2026 01:31:30 +0000
-Subject: [PATCH 3/5] Off-theme fixes: one master Pip (Balloon Pop vehicles at
+Subject: [PATCH 3/6] Off-theme fixes: one master Pip (Balloon Pop vehicles at
  the master's line weight; the painted train borrows the master painter);
  Shooting Stars gets the navy line with a soft night rim on stars, jar, moon
  and Pip, painted galaxies instead of photo-like ones, lighter night tint on

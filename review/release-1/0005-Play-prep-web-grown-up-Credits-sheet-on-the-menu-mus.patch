@@ -1,7 +1,7 @@
 From 9fa916fd69ef303bf93bde5f9fb8054447cbce16 Mon Sep 17 00:00:00 2001
 From: box <b@x>
 Date: Mon, 16 Nov 2026 01:31:30 +0000
-Subject: [PATCH 5/5] Play prep (web): grown-up Credits sheet on the menu
+Subject: [PATCH 5/6] Play prep (web): grown-up Credits sheet on the menu
  (music credits, version 1.0.0, open-source licences from a generated
  THIRD_PARTY_NOTICES.txt); padlock grown-up icon on the menu; a second tile
  tap during the zoom-in is ignored; picture-only 'please update' screen on

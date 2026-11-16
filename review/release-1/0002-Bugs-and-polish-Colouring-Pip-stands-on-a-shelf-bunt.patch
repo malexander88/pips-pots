@@ -1,7 +1,7 @@
 From f875914cc32cf48d61c5f0e61d1228dce1872f6f Mon Sep 17 00:00:00 2001
 From: box <b@x>
 Date: Mon, 16 Nov 2026 01:31:30 +0000
-Subject: [PATCH 2/5] Bugs and polish: Colouring Pip stands on a shelf, bunting
+Subject: [PATCH 2/6] Bugs and polish: Colouring Pip stands on a shelf, bunting
  clear of the home button, crayons inside the edge; home button breathing room
  beside a cut-out; balloons stay out of the cut-out (spawn and exit at the
  safe-area edge); piano wall notes never hidden behind the piano; 208 dead CSS

@@ -1,0 +1,284 @@
+diff -ruN -x build -x www -x .gradle -x local.properties -x '*.jar' android/app/build.gradle android-rel1/app/build.gradle
+--- android/app/build.gradle	2026-11-14 18:46:32.865198342 +0000
++++ android-rel1/app/build.gradle	2026-11-16 01:27:03.651682331 +0000
+@@ -2,32 +2,57 @@
+     id 'com.android.application'
+ }
+ 
++// release-1: the upload key lives outside the repo. /home/box/secrets/pipspots-release.properties
++// holds storeFile, storePassword, keyAlias and keyPassword (never committed). Without it, the
++// release build is simply left unsigned.
++def signingProps = new Properties()
++def signingFile = file(System.getenv('PIPSPOTS_SIGNING') ?: '/home/box/secrets/pipspots-release.properties')
++if (signingFile.exists()) signingFile.withInputStream { signingProps.load(it) }
++
+ android {
+     namespace 'com.lochlans.pipspots'
+-    compileSdk 34
++    compileSdk 36
++    buildToolsVersion '36.0.0'
+ 
+     defaultConfig {
+-        applicationId "com.lochlans.pipspots.preview"
++        applicationId "com.lochlans.pipspots"
+         minSdk 24
+-        targetSdk 34
+-        versionCode 10
+-        versionName "0.12.9"
++        targetSdk 36
++        versionCode 11
++        versionName "1.0.0"
++    }
++
++    signingConfigs {
++        if (signingProps['storeFile']) {
++            release {
++                storeFile file(signingProps['storeFile'])
++                storePassword signingProps['storePassword']
++                keyAlias signingProps['keyAlias']
++                keyPassword signingProps['keyPassword']
++            }
++        }
+     }
+ 
+     buildTypes {
+         release {
+             minifyEnabled false
++            if (signingProps['storeFile']) signingConfig signingConfigs.release
+         }
+         debug {
+             minifyEnabled false
++            applicationIdSuffix ".debug"
+         }
+     }
+     compileOptions {
+         sourceCompatibility JavaVersion.VERSION_17
+         targetCompatibility JavaVersion.VERSION_17
+     }
++    bundle {
++        // One APK split per language/density is pointless here: no strings or bitmaps to split.
++        language { enableSplit = false }
++    }
+ }
+ 
+ dependencies {
+-    // No AndroidX — plain framework WebView to keep the APK tiny and dependency-free
++    // No AndroidX: plain framework WebView keeps the app tiny and dependency-free.
+ }
+diff -ruN -x build -x www -x .gradle -x local.properties -x '*.jar' android/app/src/main/AndroidManifest.xml android-rel1/app/src/main/AndroidManifest.xml
+--- android/app/src/main/AndroidManifest.xml	2026-11-14 18:13:39.683331079 +0000
++++ android-rel1/app/src/main/AndroidManifest.xml	2026-11-16 01:27:03.651682331 +0000
+@@ -1,8 +1,17 @@
+ <?xml version="1.0" encoding="utf-8"?>
++<!--
++  release-1 (1.0.0):
++  - No INTERNET permission: every file is served from the APK by shouldInterceptRequest, and the
++    app never talks to the network (no ads, analytics or accounts).
++  - allowBackup=false and no data-extraction: there is nothing worth backing up but the settings.
++  - appCategory="game": on API 36, large screens (600dp+) ignore the landscape lock unless the app
++    is a game.
++-->
+ <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+-    <uses-permission android:name="android.permission.INTERNET" />
+     <application android:icon="@mipmap/ic_launcher" android:roundIcon="@mipmap/ic_launcher_round"
+-        android:label="@string/app_name" android:theme="@style/Theme.PipsPots" android:hardwareAccelerated="true">
++        android:label="@string/app_name" android:theme="@style/Theme.PipsPots" android:hardwareAccelerated="true"
++        android:allowBackup="false" android:fullBackupContent="false" android:dataExtractionRules="@xml/data_extraction_rules"
++        android:appCategory="game" android:enableOnBackInvokedCallback="true">
+         <activity android:name=".MainActivity" android:exported="true" android:screenOrientation="sensorLandscape"
+             android:launchMode="singleTask"
+             android:configChanges="mcc|mnc|locale|touchscreen|keyboard|keyboardHidden|navigation|screenLayout|fontScale|uiMode|orientation|density|screenSize|smallestScreenSize|layoutDirection|colorMode|fontWeightAdjustment">
+diff -ruN -x build -x www -x .gradle -x local.properties -x '*.jar' android/app/src/main/java/com/lochlans/pipspots/MainActivity.java android-rel1/app/src/main/java/com/lochlans/pipspots/MainActivity.java
+--- android/app/src/main/java/com/lochlans/pipspots/MainActivity.java	2026-11-14 18:13:39.687331220 +0000
++++ android-rel1/app/src/main/java/com/lochlans/pipspots/MainActivity.java	2026-11-16 01:27:37.871122105 +0000
+@@ -6,10 +6,15 @@
+ import android.content.MutableContextWrapper;
+ import android.media.AudioManager;
+ import android.net.Uri;
++import android.os.Build;
+ import android.os.Bundle;
+ import android.view.View;
+ import android.view.ViewGroup;
++import android.view.WindowInsets;
++import android.view.WindowInsetsController;
+ import android.view.WindowManager;
++import android.window.OnBackInvokedCallback;
++import android.window.OnBackInvokedDispatcher;
+ import android.webkit.*;
+ import java.io.InputStream;
+ import java.util.HashMap;
+@@ -28,6 +33,15 @@
+  *    being stacked on top when the app is reopened from the launcher.
+  *  - If the whole process was killed and Android restores the app, the page is loaded with
+  *    ?resume=1 and reopens the game the player was in.
++ *
++ * release-1 (1.0.0) hardening:
++ *  - Only https://appassets.androidplatform.net/www/... is ever loaded; any other navigation is
++ *    refused (shouldOverrideUrlLoading), there is no file or content access, and the app has no
++ *    INTERNET permission at all.
++ *  - Edge to edge with the system bars hidden (WindowInsetsController on API 30+), drawing into the
++ *    display cut-out; the page keeps its buttons out of it with env(safe-area-inset-*).
++ *  - Back does nothing (toddler-safe): a stray Back press can't drop the child out of the game. The
++ *    grown-up way out is the in-game home button (a 3 s hold) or the system Home gesture.
+  */
+ public class MainActivity extends Activity implements AudioManager.OnAudioFocusChangeListener {
+     private static final String HOST = "appassets.androidplatform.net";
+@@ -51,6 +65,7 @@
+             }
+         }
+         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON | WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED);
++        swallowBack();
+         am = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
+         if (sWeb != null) {
+             // Same page as before: just hand it to this Activity.
+@@ -69,19 +84,30 @@
+         WebSettings s = web.getSettings();
+         s.setJavaScriptEnabled(true);
+         s.setDomStorageEnabled(true);
+-        s.setDatabaseEnabled(true);
+         s.setMediaPlaybackRequiresUserGesture(false);
+-        s.setAllowFileAccess(true);
++        s.setAllowFileAccess(false);
++        s.setAllowContentAccess(false);
++        s.setGeolocationEnabled(false);
++        s.setSupportMultipleWindows(false);
++        s.setJavaScriptCanOpenWindowsAutomatically(false);
+         s.setLoadWithOverviewMode(true);
+         s.setUseWideViewPort(true);
+         web.setWebChromeClient(new WebChromeClient());
+         final Context assetsCtx = getApplicationContext();
+         web.setWebViewClient(new WebViewClient() {
++            /** Never leave the app: only our own pages may load in the WebView; nothing opens outside. */
++            @Override public boolean shouldOverrideUrlLoading(WebView v, WebResourceRequest r) {
++                Uri u = r.getUrl();
++                return !("https".equals(u.getScheme()) && HOST.equals(u.getHost()));
++            }
++
+             @Override public WebResourceResponse shouldInterceptRequest(WebView v, WebResourceRequest r) {
+                 Uri u = r.getUrl();
+-                if (!HOST.equals(u.getHost())) return null;
++                // Anything not ours gets an empty 404 here, so no request ever reaches the network.
++                if (!HOST.equals(u.getHost())) return new WebResourceResponse("text/plain", "utf-8", 404, "Not Found", null, null);
+                 String path = u.getPath();
+                 if (path == null || path.equals("/") || path.equals("/www/")) path = "/www/index.html";
++                if (path.contains("..") || !path.startsWith("/www/")) return new WebResourceResponse("text/plain", "utf-8", 404, "Not Found", null, null);
+                 try {
+                     InputStream in = assetsCtx.getAssets().open(path.substring(1));
+                     Map<String, String> h = new HashMap<>();
+@@ -113,17 +139,35 @@
+         if (p.endsWith(".wasm")) return "application/wasm";
+         if (p.endsWith(".mp3")) return "audio/mpeg";
+         if (p.endsWith(".ogg")) return "audio/ogg";
+-        if (p.endsWith(".m4a")) return "audio/mp4";
+-        if (p.endsWith(".wav")) return "audio/wav";
+-        if (p.endsWith(".glb")) return "model/gltf-binary";
+-        if (p.endsWith(".ktx2")) return "image/ktx2";
++        if (p.endsWith(".txt")) return "text/plain";
+         return "application/octet-stream";
+     }
+ 
++    /** Full screen, edge to edge: system bars hidden, a swipe shows them briefly. */
++    @SuppressWarnings("deprecation")
+     private void hideBars() {
+-        getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY | View.SYSTEM_UI_FLAG_FULLSCREEN
+-            | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION | View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+-            | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN);
++        if (Build.VERSION.SDK_INT >= 30) {
++            getWindow().setDecorFitsSystemWindows(false);
++            WindowInsetsController c = getWindow().getInsetsController();
++            if (c != null) {
++                c.hide(WindowInsets.Type.systemBars());
++                c.setSystemBarsBehavior(WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
++            }
++        } else {
++            getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY | View.SYSTEM_UI_FLAG_FULLSCREEN
++                | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION | View.SYSTEM_UI_FLAG_LAYOUT_STABLE
++                | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN);
++        }
++    }
++
++    /** Back does nothing (API 33+: a registered no-op callback; older: onBackPressed below). */
++    private OnBackInvokedCallback backSink;
++
++    private void swallowBack() {
++        if (Build.VERSION.SDK_INT >= 33 && backSink == null) {
++            backSink = () -> { /* toddler-safe: ignore Back */ };
++            getOnBackInvokedDispatcher().registerOnBackInvokedCallback(OnBackInvokedDispatcher.PRIORITY_DEFAULT, backSink);
++        }
+     }
+ 
+     private void js(String call) {
+@@ -186,9 +230,15 @@
+                 sCtx.setBaseContext(getApplicationContext());
+             }
+         }
++        if (Build.VERSION.SDK_INT >= 33 && backSink != null) {
++            getOnBackInvokedDispatcher().unregisterOnBackInvokedCallback(backSink);
++            backSink = null;
++        }
+         web = null;
+         super.onDestroy();
+     }
+ 
+-    @Override public void onBackPressed() { if (web != null && web.canGoBack()) web.goBack(); else super.onBackPressed(); }
++    /** Before API 33 (and as a fallback): Back does nothing. */
++    @SuppressWarnings("deprecation")
++    @Override public void onBackPressed() { /* toddler-safe: ignore Back */ }
+ }
+diff -ruN -x build -x www -x .gradle -x local.properties -x '*.jar' android/app/src/main/res/values/strings.xml android-rel1/app/src/main/res/values/strings.xml
+--- android/app/src/main/res/values/strings.xml	2026-11-14 18:13:48.611601513 +0000
++++ android-rel1/app/src/main/res/values/strings.xml	2026-11-16 01:27:03.651682331 +0000
+@@ -1 +1 @@
+-<resources><string name="app_name">Pip\'s Pots Preview</string></resources>
++<resources><string name="app_name">Pip\'s Pots</string></resources>
+diff -ruN -x build -x www -x .gradle -x local.properties -x '*.jar' android/app/src/main/res/values-v28/themes.xml android-rel1/app/src/main/res/values-v28/themes.xml
+--- android/app/src/main/res/values-v28/themes.xml	1970-01-01 01:00:00.000000000 +0100
++++ android-rel1/app/src/main/res/values-v28/themes.xml	2026-11-16 01:27:37.859122302 +0000
+@@ -0,0 +1,7 @@
++<resources>
++    <!-- release-1: draw into the display cut-out on the short edges; the page keeps its own UI clear of it with env(safe-area-inset-*). -->
++    <style name="Theme.PipsPots" parent="android:Theme.Material.NoActionBar.Fullscreen">
++        <item name="android:windowBackground">#8fd4f8</item>
++        <item name="android:windowLayoutInDisplayCutoutMode">shortEdges</item>
++    </style>
++</resources>
+diff -ruN -x build -x www -x .gradle -x local.properties -x '*.jar' android/app/src/main/res/values-v30/themes.xml android-rel1/app/src/main/res/values-v30/themes.xml
+--- android/app/src/main/res/values-v30/themes.xml	1970-01-01 01:00:00.000000000 +0100
++++ android-rel1/app/src/main/res/values-v30/themes.xml	2026-11-16 01:27:37.859122302 +0000
+@@ -0,0 +1,6 @@
++<resources>
++    <style name="Theme.PipsPots" parent="android:Theme.Material.NoActionBar.Fullscreen">
++        <item name="android:windowBackground">#8fd4f8</item>
++        <item name="android:windowLayoutInDisplayCutoutMode">always</item>
++    </style>
++</resources>
+diff -ruN -x build -x www -x .gradle -x local.properties -x '*.jar' android/app/src/main/res/xml/data_extraction_rules.xml android-rel1/app/src/main/res/xml/data_extraction_rules.xml
+--- android/app/src/main/res/xml/data_extraction_rules.xml	1970-01-01 01:00:00.000000000 +0100
++++ android-rel1/app/src/main/res/xml/data_extraction_rules.xml	2026-11-16 01:27:03.655682265 +0000
+@@ -0,0 +1,6 @@
++<?xml version="1.0" encoding="utf-8"?>
++<!-- release-1: no cloud backup and no device-to-device transfer of app data. -->
++<data-extraction-rules>
++    <cloud-backup><exclude domain="root" /><exclude domain="file" /><exclude domain="database" /><exclude domain="sharedpref" /><exclude domain="external" /></cloud-backup>
++    <device-transfer><exclude domain="root" /><exclude domain="file" /><exclude domain="database" /><exclude domain="sharedpref" /><exclude domain="external" /></device-transfer>
++</data-extraction-rules>
+diff -ruN -x build -x www -x .gradle -x local.properties -x '*.jar' android/build.gradle android-rel1/build.gradle
+--- android/build.gradle	2026-11-14 18:13:39.615328680 +0000
++++ android-rel1/build.gradle	2026-11-16 01:27:03.647682396 +0000
+@@ -1,3 +1,4 @@
+ plugins {
+-    id 'com.android.application' version '8.5.2' apply false
++    // release-1: AGP 8.13 (Gradle 8.14) for compileSdk / targetSdk 36.
++    id 'com.android.application' version '8.13.2' apply false
+ }
+diff -ruN -x build -x www -x .gradle -x local.properties -x '*.jar' android/gradle/wrapper/gradle-wrapper.properties android-rel1/gradle/wrapper/gradle-wrapper.properties
+--- android/gradle/wrapper/gradle-wrapper.properties	2026-11-14 18:13:39.679330937 +0000
++++ android-rel1/gradle/wrapper/gradle-wrapper.properties	2026-11-16 01:27:03.647682396 +0000
+@@ -1,6 +1,6 @@
+ distributionBase=GRADLE_USER_HOME
+ distributionPath=wrapper/dists
+-distributionUrl=https\://services.gradle.org/distributions/gradle-8.7-bin.zip
++distributionUrl=https\://services.gradle.org/distributions/gradle-8.14.3-bin.zip
+ networkTimeout=10000
+ validateDistributionUrl=true
+ zipStoreBase=GRADLE_USER_HOME

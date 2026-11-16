@@ -17,15 +17,6 @@ Colour sorting (levels and endless) music:
 Licensed under Creative Commons: By Attribution 4.0 License
 http://creativecommons.org/licenses/by/4.0/
 
-Shape Box music:
-"Wholesome" Kevin MacLeod (incompetech.com)
-Licensed under Creative Commons: By Attribution 4.0 License
-http://creativecommons.org/licenses/by/4.0/
-
-Fish Nets music:
-"Aquaria" by cynicmusic, OpenGameArt (https://opengameart.org/content/aquaria)
-CC0 (public domain dedication). Credit optional.
-
 Shooting stars music:
 Träumerei (Schumann) — performed by Donald Betts; recording from Musopen (public domain).
 Source: https://commons.wikimedia.org/wiki/File:Robert_Schumann_-_scenes_from_childhood,_op._15_-_vii._dreaming.ogg
@@ -33,10 +24,14 @@ Musopen: https://musopen.org/music/2326-kinderszenen-scenes-from-childhood-op-15
 
 Changes: each track was cut to a seamless loop (the Kevin MacLeod tracks with a
 1.5 s equal-power crossfade at a bar-aligned point), loudness-matched and
-re-encoded as Ogg Vorbis and AAC. "Daily Beetle" was cut to a 40-bar loop
+re-encoded as Ogg Vorbis. "Daily Beetle" was cut to a 40-bar loop
 (57.05 s to 153.64 s of the original) with the same 1.5 s crossfade.
 "dailybeetle-intro" is the first 12 s of that same loop, so the menu music can
 start at once while the full loop loads.
 "Träumerei" was trimmed of its leading and trailing silence (0.45 s to 197.6 s of the
 recording), looped with a 1.5 s equal-power crossfade (it is not a seamless loop),
-loudness-matched to -20 LUFS and re-encoded as Ogg Vorbis and AAC.
+loudness-matched to -20 LUFS and re-encoded as Ogg Vorbis.
+
+Piano and Colouring: sounds and music made in the app.
+
+Open-source software notices: see THIRD_PARTY_NOTICES.txt.

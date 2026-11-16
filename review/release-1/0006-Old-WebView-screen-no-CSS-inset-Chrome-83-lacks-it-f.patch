@@ -1,0 +1,35 @@
+From 0b262837c9a4a75ac688d3e6818d3470e0040d8f Mon Sep 17 00:00:00 2001
+From: box <b@x>
+Date: Mon, 16 Nov 2026 01:41:33 +0000
+Subject: [PATCH 6/6] Old-WebView screen: no CSS inset (Chrome 83 lacks it),
+ full-screen picture
+
+---
+ spa.html | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/spa.html b/spa.html
+index b9da708..c7053e3 100644
+--- a/spa.html
++++ b/spa.html
+@@ -17,7 +17,7 @@
+       children): a phone with a circling update arrow. The app module then does not start.
+     -->
+     <div id="old-webview" hidden aria-label="Please update Android System WebView or Chrome" role="img">
+-      <svg viewBox="0 0 200 200" width="60%" height="60%">
++      <svg viewBox="0 0 200 200" style="width:60vmin;height:60vmin">
+         <circle cx="100" cy="100" r="92" fill="#fff7e6" stroke="#2e4168" stroke-width="8" />
+         <rect x="70" y="40" width="60" height="112" rx="12" fill="#8fd4f8" stroke="#2e4168" stroke-width="8" />
+         <circle cx="100" cy="136" r="5" fill="#2e4168" />
+@@ -42,7 +42,7 @@
+           window.__pipOldWebView = true;
+           var el = document.getElementById("old-webview");
+           el.hidden = false;
+-          el.style.cssText = "position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:#8fd4f8";
++          el.style.cssText = "position:fixed;top:0;left:0;width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:#8fd4f8";
+         }
+       })();
+     </script>
+-- 
+2.47.3
+

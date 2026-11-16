@@ -1,0 +1,4 @@
+plugins {
+    // release-1: AGP 8.13 (Gradle 8.14) for compileSdk / targetSdk 36.
+    id 'com.android.application' version '8.13.2' apply false
+}

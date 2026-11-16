@@ -1,0 +1,6 @@
+<resources>
+    <style name="Theme.PipsPots" parent="android:Theme.Material.NoActionBar.Fullscreen">
+        <item name="android:windowBackground">#8fd4f8</item>
+        <item name="android:windowLayoutInDisplayCutoutMode">always</item>
+    </style>
+</resources>

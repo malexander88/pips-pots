@@ -1,0 +1,58 @@
+plugins {
+    id 'com.android.application'
+}
+
+// release-1: the upload key lives outside the repo. /home/box/secrets/pipspots-release.properties
+// holds storeFile, storePassword, keyAlias and keyPassword (never committed). Without it, the
+// release build is simply left unsigned.
+def signingProps = new Properties()
+def signingFile = file(System.getenv('PIPSPOTS_SIGNING') ?: '/home/box/secrets/pipspots-release.properties')
+if (signingFile.exists()) signingFile.withInputStream { signingProps.load(it) }
+
+android {
+    namespace 'com.lochlans.pipspots'
+    compileSdk 36
+    buildToolsVersion '36.0.0'
+
+    defaultConfig {
+        applicationId "com.lochlans.pipspots"
+        minSdk 24
+        targetSdk 36
+        versionCode 11
+        versionName "1.0.0"
+    }
+
+    signingConfigs {
+        if (signingProps['storeFile']) {
+            release {
+                storeFile file(signingProps['storeFile'])
+                storePassword signingProps['storePassword']
+                keyAlias signingProps['keyAlias']
+                keyPassword signingProps['keyPassword']
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            if (signingProps['storeFile']) signingConfig signingConfigs.release
+        }
+        debug {
+            minifyEnabled false
+            applicationIdSuffix ".debug"
+        }
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+    bundle {
+        // One APK split per language/density is pointless here: no strings or bitmaps to split.
+        language { enableSplit = false }
+    }
+}
+
+dependencies {
+    // No AndroidX: plain framework WebView keeps the app tiny and dependency-free.
+}

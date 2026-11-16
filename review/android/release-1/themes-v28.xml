@@ -1,0 +1,7 @@
+<resources>
+    <!-- release-1: draw into the display cut-out on the short edges; the page keeps its own UI clear of it with env(safe-area-inset-*). -->
+    <style name="Theme.PipsPots" parent="android:Theme.Material.NoActionBar.Fullscreen">
+        <item name="android:windowBackground">#8fd4f8</item>
+        <item name="android:windowLayoutInDisplayCutoutMode">shortEdges</item>
+    </style>
+</resources>
