@@ -1,7 +1,7 @@
 From 779f8540b14402c6728f03e6b71e849fbd9ebd5c Mon Sep 17 00:00:00 2001
 From: box <b@x>
 Date: Mon, 16 Nov 2026 01:31:30 +0000
-Subject: [PATCH 4/6] Even out loudness: Colouring pad +18 dB and brush sounds
+Subject: [PATCH 4/7] Even out loudness: Colouring pad +18 dB and brush sounds
  +8 dB, piano keys -7 dB (K-weighted, matched to the music beds); silent
  pre-warm note so the first piano tap has no long frame
 

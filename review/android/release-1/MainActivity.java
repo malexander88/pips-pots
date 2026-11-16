@@ -209,9 +209,14 @@ public class MainActivity extends Activity implements AudioManager.OnAudioFocusC
     }
 
     /** A phone call or another app's sound took over: go quiet; carry on when it hands back. */
+    /**
+     * 1.0.1: audio focus is about sound only. Losing it (a call, another app's music) silences the
+     * page; it never pauses the games. In 1.0.0 a loss called pause(), which stood every game still,
+     * and a permanent loss never gave the focus back while the app stayed in front: the games froze.
+     */
     @Override public void onAudioFocusChange(int change) {
-        if (change == AudioManager.AUDIOFOCUS_LOSS || change == AudioManager.AUDIOFOCUS_LOSS_TRANSIENT) js("pause");
-        else if (change == AudioManager.AUDIOFOCUS_GAIN && resumed) js("resume");
+        if (change == AudioManager.AUDIOFOCUS_LOSS || change == AudioManager.AUDIOFOCUS_LOSS_TRANSIENT) js("audioOff");
+        else if (change == AudioManager.AUDIOFOCUS_GAIN && resumed) js("audioOn");
     }
 
     @Override protected void onDestroy() {

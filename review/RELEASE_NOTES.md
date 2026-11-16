@@ -96,3 +96,28 @@
   - 0 errors, always 1 AudioContext and 1 GL context, at most 1 music loop.
   - 0 intervals and 0 pending timeouts at the menu.
 - **Not met:** Piano with 4 taps a second is 32% main-thread busy at 4x CPU, over the 25% house budget (it was 34%). Normal tapping is well under. Everything else is under 25%.
+
+---
+
+# 1.0.1 (versionCode 12): the Shooting Stars freeze
+
+**What happened on a real phone (1.0.0):** opening Shooting Stars froze the game. Going back to the menu still worked, but every other game stayed frozen afterwards.
+
+**Root cause** (confirmed on an Android 11 emulator's WebView with a test page; the full app wasn't run there):
+1. In the Android app, a game track that hadn't been decoded yet started by streaming the file through an `<audio>` element. Träumerei, the Shooting Stars track, is the longest file (195 s), so it streams the longest.
+2. When a WebView `<audio>` element plays, Chromium requests Android audio focus for it (`AudioFocusDelegate`). The app's own `MainActivity` listener then gets `AUDIOFOCUS_LOSS` (−1, permanent).
+3. From 0.12.7, the wrapper answered any focus loss with `__pipLifecycle.pause()`, the same "app in the background" pause as `onPause`. That suspends the sound and stands **every** game loop still (sim step, stars, pots, colouring, piano song).
+4. A permanent loss never hands the focus back while the app stays in front, so the pause was never lifted. The menu UI still worked, but every game stayed frozen until the app went to the background and came back.
+
+On the emulator, the logs showed `requestAudioFocus … org.chromium.content.browser.AudioFocusDelegate`, then `onAudioFocusChange -1 resumed=true`, then `pause`.
+
+**Fix:**
+- **Wrapper:** audio focus now only affects sound. A loss calls `__pipLifecycle.audioOff()` (sound suspended, games keep running) and a gain calls `audioOn()`. `onResume` brings both the games and the sound back.
+- **Web app, Android only:**
+  - No more `<audio>` streaming inside the Android app.
+  - Every track now has a 12 s intro segment, sample-aligned with the full file and decoded in a blink, so the music still starts at once. The full loop takes over at the same sample.
+- **Safety nets:**
+  - A touch on a visible page clears any stale "native"/"freeze" pause.
+  - Only the current track and the menu loop stay decoded. Träumerei alone is about 70 MB of PCM, so this cuts memory on phones.
+  - A game that fails to start, or a game screen that throws, goes back to the menu.
+  - A failed sim step can't stop the loop.

@@ -1,7 +1,7 @@
 From 42401e037e660bf0281c1486d2ea2a1ef194b74c Mon Sep 17 00:00:00 2001
 From: box <b@x>
 Date: Mon, 16 Nov 2026 00:59:23 +0000
-Subject: [PATCH 1/6] Remove the retired games: Fish Nets, Shape Box, the 3D
+Subject: [PATCH 1/7] Remove the retired games: Fish Nets, Shape Box, the 3D
  pots table and bubble tubes (sim, scene, audio, assets); one audio format
  (Ogg); unknown-licence files; train offers 2/3/4 colours; 3D loop stops
  outside Balloon Pop

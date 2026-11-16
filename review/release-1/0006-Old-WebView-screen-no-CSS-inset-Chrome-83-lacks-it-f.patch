@@ -1,7 +1,7 @@
 From 0b262837c9a4a75ac688d3e6818d3470e0040d8f Mon Sep 17 00:00:00 2001
 From: box <b@x>
 Date: Mon, 16 Nov 2026 01:41:33 +0000
-Subject: [PATCH 6/6] Old-WebView screen: no CSS inset (Chrome 83 lacks it),
+Subject: [PATCH 6/7] Old-WebView screen: no CSS inset (Chrome 83 lacks it),
  full-screen picture
 
 ---
